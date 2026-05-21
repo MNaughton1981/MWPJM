@@ -47,6 +47,10 @@ the FWKD ID is in the subject and posts the body as a work order note.
   email never gets sent.
 - **Templates** — seeded "Kitchenette Dishwasher Upgrade (18" + 24")"
   template with the standard task list.
+- **Work Order Dashboard** — import a CSV exported from a Nuvolo
+  open-work-orders report. Auto-detects ServiceNow column names. Shows
+  totals, overdue counts, and a searchable table. One click to "Start
+  project from this WO" — pre-fills FWKD ID, location, and description.
 - **Export to OneNote** — generates a Markdown summary you can paste into
   OneNote for the long-term record.
 

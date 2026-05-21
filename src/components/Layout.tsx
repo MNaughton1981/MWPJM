@@ -26,6 +26,16 @@ export default function Layout() {
               Projects
             </NavLink>
             <NavLink
+              to="/dashboard"
+              className={({ isActive }) =>
+                `px-3 py-1.5 rounded-md ${
+                  isActive ? 'bg-white/10' : 'hover:bg-white/5'
+                }`
+              }
+            >
+              Dashboard
+            </NavLink>
+            <NavLink
               to="/settings"
               className={({ isActive }) =>
                 `px-3 py-1.5 rounded-md ${
