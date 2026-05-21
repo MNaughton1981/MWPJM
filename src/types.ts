@@ -64,6 +64,13 @@ export interface Project {
 export interface Settings {
   technicianName: string;
   nuvoloEmail: string; // default mathworks@service-now.com
+  /**
+   * Display-only string of where Nuvolo reports get exported. Browsers
+   * cannot read arbitrary local paths, so this is purely a hint shown
+   * in the UI to remind the user where to navigate. Real folder access
+   * is via the File System Access API (see folderConnection.ts).
+   */
+  reportFolderPath: string;
 }
 
 export interface AppData {
