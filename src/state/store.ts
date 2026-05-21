@@ -49,6 +49,8 @@ interface AppState {
 const defaultSettings: Settings = {
   technicianName: '',
   nuvoloEmail: DEFAULT_NUVOLO_EMAIL,
+  reportFolderPath:
+    'C:\\Users\\mnaughto\\OneDrive - MathWorks\\Projects\\Nuvolo Dev\\fegpjm\\reports\\open_work_orders',
 };
 
 function touch(p: Project): Project {

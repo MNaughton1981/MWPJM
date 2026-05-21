@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../state/store';
 import {
   buildAppData,
@@ -6,6 +6,12 @@ import {
   parseAppDataFile,
 } from '../lib/exporters';
 import { DEFAULT_NUVOLO_EMAIL } from '../lib/nuvolo';
+import {
+  clearFolderHandle,
+  getStoredFolderName,
+  isFolderApiSupported,
+  pickReportFolder,
+} from '../lib/folderConnection';
 
 export default function SettingsPage() {
   const settings = useStore((s) => s.settings);
@@ -15,6 +21,13 @@ export default function SettingsPage() {
 
   const fileRef = useRef<HTMLInputElement>(null);
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [connectedFolder, setConnectedFolder] = useState<string | undefined>();
+  const [folderError, setFolderError] = useState<string | null>(null);
+  const folderApi = isFolderApiSupported();
+
+  useEffect(() => {
+    getStoredFolderName().then(setConnectedFolder);
+  }, []);
 
   function exportBackup() {
     const data = buildAppData(projects, settings);
@@ -33,6 +46,23 @@ export default function SettingsPage() {
     } catch (e) {
       setImportMsg(`Import failed: ${(e as Error).message}`);
     }
+  }
+
+  async function connectFolder() {
+    setFolderError(null);
+    try {
+      const result = await pickReportFolder();
+      setConnectedFolder(result.name);
+    } catch (e) {
+      // User cancellation throws AbortError — don't treat as an error
+      if ((e as { name?: string }).name === 'AbortError') return;
+      setFolderError((e as Error).message);
+    }
+  }
+
+  async function disconnectFolder() {
+    await clearFolderHandle();
+    setConnectedFolder(undefined);
   }
 
   return (
@@ -67,6 +97,61 @@ export default function SettingsPage() {
             stored here. Nuvolo ingests the message because the FWKD ID appears
             in the subject line.
           </p>
+        </div>
+      </section>
+
+      <section className="card p-4 space-y-3">
+        <h2 className="font-semibold">Nuvolo report folder</h2>
+        <div>
+          <label className="label">
+            Where you export open-work-order reports
+          </label>
+          <input
+            className="input font-mono text-xs"
+            placeholder="C:\Users\you\OneDrive\…\open_work_orders"
+            value={settings.reportFolderPath}
+            onChange={(e) => setSettings({ reportFolderPath: e.target.value })}
+          />
+          <p className="text-xs text-slate-500 mt-1">
+            Shown as a reminder on the Dashboard. Browsers can't read this path
+            directly for security reasons — use the "Connect folder" button
+            below to grant the app permission to read it (Chrome / Edge only).
+          </p>
+        </div>
+
+        <div>
+          <label className="label">Connected folder (auto-refresh)</label>
+          {!folderApi ? (
+            <p className="text-xs text-slate-500">
+              This browser doesn't support folder access. On iPhone Safari,
+              you'll always pick the file manually from OneDrive.
+            </p>
+          ) : connectedFolder ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="pill bg-emerald-100 text-emerald-800">
+                Connected: <strong className="ml-1">{connectedFolder}</strong>
+              </span>
+              <button className="btn-ghost text-xs" onClick={disconnectFolder}>
+                Disconnect
+              </button>
+              <button className="btn-secondary text-xs" onClick={connectFolder}>
+                Re-connect / change
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 flex-wrap">
+              <button className="btn-primary" onClick={connectFolder}>
+                Connect folder…
+              </button>
+              <p className="text-xs text-slate-500">
+                You'll be prompted to navigate to your{' '}
+                <code className="text-xs">open_work_orders</code> folder once.
+              </p>
+            </div>
+          )}
+          {folderError && (
+            <p className="text-xs text-rose-600 mt-1">{folderError}</p>
+          )}
         </div>
       </section>
 
