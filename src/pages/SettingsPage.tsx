@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useStore } from '../state/store';
 import {
   buildAppData,
@@ -66,6 +67,28 @@ export default function SettingsPage() {
             your default mail client (Outlook, Gmail, Mail) — no credentials are
             stored here. Nuvolo ingests the message because the FWKD ID appears
             in the subject line.
+          </p>
+        </div>
+      </section>
+
+      <section className="card p-4 space-y-3">
+        <h2 className="font-semibold">Nuvolo report folder path</h2>
+        <div>
+          <label className="label">
+            Where you export open-work-order CSVs (display-only reminder)
+          </label>
+          <input
+            className="input font-mono text-xs"
+            placeholder="C:\Users\you\OneDrive\…\open_work_orders"
+            value={settings.reportFolderPath}
+            onChange={(e) => setSettings({ reportFolderPath: e.target.value })}
+          />
+          <p className="text-xs text-slate-500 mt-1">
+            Browsers can't read this path directly for security reasons. Use{' '}
+            <Link to="/reports" className="text-brand-600 hover:underline">
+              Reports → Connect folder
+            </Link>{' '}
+            to grant the app permission (Chrome / Edge only).
           </p>
         </div>
       </section>

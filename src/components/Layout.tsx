@@ -1,40 +1,41 @@
 import { NavLink, Outlet } from 'react-router-dom';
 
+const NAV_ITEMS = [
+  { to: '/projects', label: 'Projects' },
+  { to: '/dashboard', label: 'Dashboard' },
+  { to: '/reports', label: 'Reports' },
+  { to: '/settings', label: 'Settings' },
+];
+
 export default function Layout() {
   return (
     <div className="min-h-full flex flex-col">
       <header className="safe-top bg-slate-900 text-white sticky top-0 z-30 shadow-md">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-          <NavLink to="/projects" className="flex items-center gap-2">
+        <div className="max-w-5xl mx-auto px-3 sm:px-4 py-3 flex items-center gap-3">
+          <NavLink to="/projects" className="flex items-center gap-2 shrink-0">
             <Logo />
-            <div>
+            {/* Hide the wordmark on small screens to give the nav room */}
+            <div className="hidden sm:block">
               <div className="font-semibold leading-none">MWPJM</div>
               <div className="text-[10px] uppercase tracking-wider text-slate-400">
                 Facilities Project Manager
               </div>
             </div>
           </NavLink>
-          <nav className="flex items-center gap-1 text-sm">
-            <NavLink
-              to="/projects"
-              className={({ isActive }) =>
-                `px-3 py-1.5 rounded-md ${
-                  isActive ? 'bg-white/10' : 'hover:bg-white/5'
-                }`
-              }
-            >
-              Projects
-            </NavLink>
-            <NavLink
-              to="/settings"
-              className={({ isActive }) =>
-                `px-3 py-1.5 rounded-md ${
-                  isActive ? 'bg-white/10' : 'hover:bg-white/5'
-                }`
-              }
-            >
-              Settings
-            </NavLink>
+          <nav className="flex items-center gap-0.5 sm:gap-1 text-xs sm:text-sm ml-auto overflow-x-auto">
+            {NAV_ITEMS.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) =>
+                  `px-2 sm:px-3 py-1.5 rounded-md whitespace-nowrap ${
+                    isActive ? 'bg-white/10' : 'hover:bg-white/5'
+                  }`
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
           </nav>
         </div>
       </header>

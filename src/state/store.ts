@@ -8,12 +8,14 @@ import type {
   Settings,
   Trade,
 } from '../types';
+import type { ImportedWorkOrders } from '../lib/workOrderCsv';
 import { DEFAULT_NUVOLO_EMAIL } from '../lib/nuvolo';
 import { uid } from '../lib/format';
 
 interface AppState {
   projects: Project[];
   settings: Settings;
+  workOrders: ImportedWorkOrders | null;
 
   // Project CRUD
   addProject: (p: Project) => void;
@@ -37,6 +39,9 @@ interface AppState {
   // Settings
   setSettings: (patch: Partial<Settings>) => void;
 
+  // Work orders (imported from Nuvolo CSV)
+  setWorkOrders: (data: ImportedWorkOrders | null) => void;
+
   // Bulk import/export
   replaceAll: (data: { projects: Project[]; settings: Settings }) => void;
 }
@@ -44,6 +49,8 @@ interface AppState {
 const defaultSettings: Settings = {
   technicianName: '',
   nuvoloEmail: DEFAULT_NUVOLO_EMAIL,
+  reportFolderPath:
+    'C:\\Users\\mnaughto\\OneDrive - MathWorks\\Projects\\Nuvolo Dev\\fegpjm\\reports\\open_work_orders',
 };
 
 function touch(p: Project): Project {
@@ -55,6 +62,7 @@ export const useStore = create<AppState>()(
     (set) => ({
       projects: [],
       settings: defaultSettings,
+      workOrders: null,
 
       addProject: (p) =>
         set((s) => ({ projects: [p, ...s.projects] })),
@@ -162,6 +170,8 @@ export const useStore = create<AppState>()(
 
       setSettings: (patch) =>
         set((s) => ({ settings: { ...s.settings, ...patch } })),
+
+      setWorkOrders: (data) => set(() => ({ workOrders: data })),
 
       replaceAll: (data) =>
         set(() => ({
