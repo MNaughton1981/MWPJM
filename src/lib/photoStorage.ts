@@ -88,14 +88,25 @@ export async function deleteProjectPhotos(projectId: string): Promise<void> {
 
 // ---------- filename generation ----------
 
-const SLUG_RE = /[^a-z0-9]+/g;
+// Strip characters that are illegal in Windows filenames; preserve spaces
+// and dashes so captions like "Dishwasher rough-in" come through readable.
+const FILENAME_ILLEGAL = /[<>:"/\\|?*\x00-\x1f]/g;
 
-function slugify(s: string, max = 40): string {
-  const slug = s
+function softCleanCaption(s: string, max = 60): string {
+  return s
+    .replace(FILENAME_ILLEGAL, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, max);
+}
+
+// Project names go inside path-shaped placeholders; keep them strict.
+function strictSlug(s: string, max = 30): string {
+  return s
     .toLowerCase()
-    .replace(SLUG_RE, '-')
-    .replace(/^-+|-+$/g, '');
-  return slug.slice(0, max);
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, max);
 }
 
 export interface FilenameArgs {
@@ -110,12 +121,14 @@ export interface FilenameArgs {
 
 /**
  * Render a photo filename from a template like
- *   {wo}_{date}_{seq}_{caption}.{ext}
+ *   {date} - {caption}.{ext}
  * Available placeholders:
  *   {wo}      — work order ID, or "no-wo" if blank
  *   {project} — slugified project name
  *   {date}    — capturedAt as YYYY-MM-DD
- *   {caption} — slugified caption (or "photo" if blank)
+ *   {caption} — caption (spaces preserved; only illegal filename chars
+ *               stripped, e.g. < > : " / \ | ? *). Falls back to "photo"
+ *               if blank.
  *   {seq}     — zero-padded sequence number (001, 002, …)
  *   {ext}     — original file extension
  *
@@ -126,9 +139,9 @@ export function buildFilename(args: FilenameArgs): string {
   const ext = (extMatch?.[1] ?? 'jpg').toLowerCase();
   const date = (args.capturedAt || new Date().toISOString()).slice(0, 10);
   const seq = String(args.seq).padStart(3, '0');
-  const caption = slugify(args.caption) || 'photo';
+  const caption = softCleanCaption(args.caption) || 'photo';
   const wo = args.workOrderId?.trim() || 'no-wo';
-  const project = slugify(args.projectName, 30) || 'project';
+  const project = strictSlug(args.projectName) || 'project';
 
   let name = args.pattern
     .replace(/\{wo\}/g, wo)
@@ -139,7 +152,7 @@ export function buildFilename(args: FilenameArgs): string {
     .replace(/\{ext\}/g, ext);
 
   if (!args.pattern.includes('{ext}')) name += `.${ext}`;
-  return name;
+  return name.replace(FILENAME_ILLEGAL, '');
 }
 
-export const DEFAULT_PHOTO_NAMING_PATTERN = '{wo}_{date}_{seq}_{caption}.{ext}';
+export const DEFAULT_PHOTO_NAMING_PATTERN = '{date} - {caption}.{ext}';

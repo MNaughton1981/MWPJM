@@ -66,6 +66,7 @@ const defaultSettings: Settings = {
   reportFolderPath:
     'C:\\Users\\mnaughto\\OneDrive - MathWorks\\Projects\\Nuvolo Dev\\fegpjm\\reports\\open_work_orders',
   photoNamingPattern: DEFAULT_PHOTO_NAMING_PATTERN,
+  userEmail: '',
 };
 
 function touch(p: Project): Project {

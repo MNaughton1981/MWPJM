@@ -51,6 +51,24 @@ export default function SettingsPage() {
             onChange={(e) => setSettings({ technicianName: e.target.value })}
           />
         </div>
+        <div>
+          <label className="label">
+            Your email (for "✅ To Do" — sent to yourself with TODO: prefix)
+          </label>
+          <input
+            className="input"
+            type="email"
+            placeholder="you@mathworks.com"
+            value={settings.userEmail}
+            onChange={(e) => setSettings({ userEmail: e.target.value })}
+          />
+          <p className="text-xs text-slate-500 mt-1">
+            Optional. If blank, the To Do button opens your mail client with
+            an empty To: field. Set up an Outlook rule to auto-flag messages
+            with subject starting <code>TODO:</code> so they appear in
+            Microsoft To Do's "Flagged email" list.
+          </p>
+        </div>
       </section>
 
       <section className="card p-4 space-y-3">

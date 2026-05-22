@@ -91,6 +91,12 @@ export interface Settings {
    * Supported placeholders: {wo} {project} {date} {caption} {seq} {ext}.
    */
   photoNamingPattern: string;
+  /**
+   * The user's own email — used as the To: for the "Add to To Do"
+   * action so flagged messages flow into Microsoft To Do. Optional;
+   * if blank the mail client opens with an empty To: field.
+   */
+  userEmail: string;
 }
 
 export interface AppData {
