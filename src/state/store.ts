@@ -8,6 +8,7 @@ import type {
   ProjectStatus,
   Settings,
   Trade,
+  Vendor,
 } from '../types';
 import type { ImportedWorkOrders } from '../lib/workOrderCsv';
 import { DEFAULT_NUVOLO_EMAIL, DEFAULT_WO_URL_PATTERN } from '../lib/nuvolo';
@@ -15,6 +16,7 @@ import {
   DEFAULT_PHOTO_NAMING_PATTERN,
   deleteProjectPhotos,
 } from '../lib/photoStorage';
+import { DEFAULT_SECURITY_PREAMBLE } from '../lib/security';
 import { uid } from '../lib/format';
 
 interface AppState {
@@ -50,6 +52,15 @@ interface AppState {
   ) => void;
   removePhotoMeta: (projectId: string, photoId: string) => void;
 
+  // Vendors
+  addVendor: (projectId: string, vendor: Omit<Vendor, 'id'>) => void;
+  updateVendor: (
+    projectId: string,
+    vendorId: string,
+    patch: Partial<Vendor>,
+  ) => void;
+  removeVendor: (projectId: string, vendorId: string) => void;
+
   // Settings
   setSettings: (patch: Partial<Settings>) => void;
 
@@ -68,6 +79,9 @@ const defaultSettings: Settings = {
   photoNamingPattern: DEFAULT_PHOTO_NAMING_PATTERN,
   userEmail: '',
   nuvoloWorkOrderUrlPattern: DEFAULT_WO_URL_PATTERN,
+  securityEmail: '',
+  securityPreamble: DEFAULT_SECURITY_PREAMBLE,
+  securityCcSelf: true,
 };
 
 function touch(p: Project): Project {
@@ -219,6 +233,44 @@ export const useStore = create<AppState>()(
               ? touch({
                   ...p,
                   photos: (p.photos ?? []).filter((ph) => ph.id !== photoId),
+                })
+              : p,
+          ),
+        })),
+
+      addVendor: (projectId, vendor) =>
+        set((s) => ({
+          projects: s.projects.map((p) =>
+            p.id === projectId
+              ? touch({
+                  ...p,
+                  vendors: [...(p.vendors ?? []), { ...vendor, id: uid() }],
+                })
+              : p,
+          ),
+        })),
+
+      updateVendor: (projectId, vendorId, patch) =>
+        set((s) => ({
+          projects: s.projects.map((p) =>
+            p.id === projectId
+              ? touch({
+                  ...p,
+                  vendors: (p.vendors ?? []).map((v) =>
+                    v.id === vendorId ? { ...v, ...patch } : v,
+                  ),
+                })
+              : p,
+          ),
+        })),
+
+      removeVendor: (projectId, vendorId) =>
+        set((s) => ({
+          projects: s.projects.map((p) =>
+            p.id === projectId
+              ? touch({
+                  ...p,
+                  vendors: (p.vendors ?? []).filter((v) => v.id !== vendorId),
                 })
               : p,
           ),

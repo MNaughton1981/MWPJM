@@ -42,6 +42,23 @@ export interface ActivityEntry {
 }
 
 /**
+ * A vendor / contractor / contact person coming on-site for a project.
+ * Distinct from the Trade Coordination tracker — vendors are individual
+ * people you might need to identify to security, give a visitor badge,
+ * etc. Trades are higher-level scheduling buckets (plumbing crew status).
+ */
+export interface Vendor {
+  id: string;
+  name: string;
+  company?: string;
+  role?: string; // free-form, e.g. "Plumber", "Electrician"
+  phone?: string;
+  email?: string;
+  visitDate?: string; // ISO date (YYYY-MM-DD)
+  notes?: string;
+}
+
+/**
  * Photo metadata. Binary data is stored separately in IndexedDB
  * (see src/lib/photoStorage.ts) keyed by `${projectId}/${photoId}`.
  */
@@ -74,6 +91,14 @@ export interface Project {
   milestones: Milestone[];
   activity: ActivityEntry[];
   photos: ProjectPhoto[];
+  vendors: Vendor[];
+  /**
+   * When true, the project page hides Trade Coordination and Timetable
+   * sections — use for quick WO follow-ups where notes, photos, and
+   * vendor info are the whole story. Existing projects without this
+   * field default to false (full layout) so we don't break anything.
+   */
+  simple?: boolean;
 }
 
 export interface Settings {
@@ -105,6 +130,12 @@ export interface Settings {
    * URL from your browser and substitute the number with `{wo}`.
    */
   nuvoloWorkOrderUrlPattern: string;
+  /** Security team email for vendor-visit notifications. */
+  securityEmail: string;
+  /** Optional preamble prepended to every security notification. */
+  securityPreamble: string;
+  /** When true, CC the user (settings.userEmail) on security notifications. */
+  securityCcSelf: boolean;
 }
 
 export interface AppData {

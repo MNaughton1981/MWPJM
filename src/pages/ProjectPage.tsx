@@ -10,6 +10,7 @@ import TradeTrackerSection from '../components/TradeTrackerSection';
 import ActivityLogSection from '../components/ActivityLogSection';
 import PhotosSection from '../components/PhotosSection';
 import UpdateComposer from '../components/UpdateComposer';
+import VendorsSection from '../components/VendorsSection';
 import { downloadText, projectToMarkdown } from '../lib/exporters';
 
 export default function ProjectPage() {
@@ -19,6 +20,7 @@ export default function ProjectPage() {
   const updateProject = useStore((s) => s.updateProject);
   const deleteProject = useStore((s) => s.deleteProject);
   const woUrlPattern = useStore((s) => s.settings.nuvoloWorkOrderUrlPattern);
+  const importedWorkOrders = useStore((s) => s.workOrders);
 
   if (!project) {
     return (
@@ -32,7 +34,20 @@ export default function ProjectPage() {
   }
 
   const woValid = isValidWorkOrderId(project.workOrderId);
-  const woUrl = woValid ? buildWorkOrderUrl(project.workOrderId, woUrlPattern) : null;
+  const woUrl = woValid
+    ? buildWorkOrderUrl(project.workOrderId, woUrlPattern)
+    : null;
+
+  // If we have imported Nuvolo CSV data and this project's WO ID matches a
+  // row in that import, show the Nuvolo state next to the WO field.
+  const importedWo = woValid
+    ? importedWorkOrders?.rows.find(
+        (r) =>
+          r.number?.toUpperCase() === project.workOrderId?.toUpperCase(),
+      )
+    : undefined;
+
+  const isSimple = project.simple ?? false;
 
   function exportMarkdown() {
     const md = projectToMarkdown(project!);
@@ -45,6 +60,10 @@ export default function ProjectPage() {
       deleteProject(project!.id);
       navigate('/projects');
     }
+  }
+
+  function toggleSimple() {
+    updateProject(project!.id, { simple: !isSimple });
   }
 
   return (
@@ -101,17 +120,41 @@ export default function ProjectPage() {
                 Expected format: FWKD followed by digits.
               </p>
             )}
-            {woUrl && (
-              <a
-                href={woUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-brand-600 hover:underline mt-1 inline-flex items-center gap-1"
-                title="Opens in your Nuvolo / ServiceNow tab (or the Nuvolo mobile app if it's installed and registered for service-now.com links)"
-              >
-                Open {project.workOrderId} in Nuvolo →
-              </a>
-            )}
+            <div className="flex items-center gap-2 flex-wrap mt-1">
+              {woUrl && (
+                <a
+                  href={woUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-brand-600 hover:underline"
+                  title="Opens in Nuvolo / your default browser. On Android, may offer to open in the Nuvolo app."
+                >
+                  Open in Nuvolo →
+                </a>
+              )}
+              {importedWo && (
+                <>
+                  {importedWo.state && (
+                    <span
+                      className="pill bg-blue-100 text-blue-800"
+                      title="State pulled from your most recent imported CSV"
+                    >
+                      Nuvolo: {importedWo.state}
+                    </span>
+                  )}
+                  {importedWo.priority && (
+                    <span className="pill bg-slate-100 text-slate-700">
+                      Priority: {importedWo.priority}
+                    </span>
+                  )}
+                  {importedWo.assignedTo && (
+                    <span className="pill bg-slate-100 text-slate-700">
+                      Assigned: {importedWo.assignedTo}
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
           </div>
           <div>
             <label className="label">Location</label>
@@ -138,7 +181,28 @@ export default function ProjectPage() {
           />
         </div>
 
-        <div className="flex flex-wrap gap-2 pt-1">
+        <div className="flex flex-wrap gap-2 pt-1 items-center">
+          <span
+            className={`pill ${
+              isSimple
+                ? 'bg-slate-100 text-slate-700'
+                : 'bg-amber-100 text-amber-800'
+            }`}
+          >
+            {isSimple ? 'Quick follow-up' : 'Full project'}
+          </span>
+          <button
+            className="btn-ghost text-xs"
+            onClick={toggleSimple}
+            title={
+              isSimple
+                ? 'Show Trade Coordination + Timetable sections'
+                : 'Hide Trade Coordination + Timetable sections'
+            }
+          >
+            {isSimple ? '+ Switch to full project' : '− Switch to quick view'}
+          </button>
+          <span className="grow" />
           <button className="btn-secondary text-xs" onClick={exportMarkdown}>
             Export to OneNote (.md)
           </button>
@@ -150,15 +214,21 @@ export default function ProjectPage() {
 
       <UpdateComposer project={project} />
 
-      <TradeTrackerSection
-        projectId={project.id}
-        trades={project.trades}
-      />
+      <VendorsSection project={project} />
 
-      <TimetableSection
-        projectId={project.id}
-        milestones={project.milestones}
-      />
+      {!isSimple && (
+        <TradeTrackerSection
+          projectId={project.id}
+          trades={project.trades}
+        />
+      )}
+
+      {!isSimple && (
+        <TimetableSection
+          projectId={project.id}
+          milestones={project.milestones}
+        />
+      )}
 
       <PhotosSection project={project} />
 
