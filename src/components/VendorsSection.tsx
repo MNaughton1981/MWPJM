@@ -27,7 +27,10 @@ export default function VendorsSection({ project }: Props) {
   const [showAdd, setShowAdd] = useState(false);
 
   const vendors = project.vendors ?? [];
-  const securityConfigured = !!settings.securityEmail.trim();
+  // Optional chaining + fallback — settings.securityEmail may be undefined
+  // for users whose localStorage was persisted before this field existed
+  // (the persist `merge` in store.ts now backfills it, but stay defensive).
+  const securityConfigured = !!settings.securityEmail?.trim();
 
   function add() {
     addVendor(project.id, {
@@ -55,7 +58,7 @@ export default function VendorsSection({ project }: Props) {
         workOrderId: project.workOrderId,
         location: project.location,
       },
-      securityEmail: settings.securityEmail,
+      securityEmail: settings.securityEmail ?? '',
       ccEmail: settings.securityCcSelf ? settings.userEmail : undefined,
       preamble: settings.securityPreamble,
       technicianName: settings.technicianName,
