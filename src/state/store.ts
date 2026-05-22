@@ -24,6 +24,19 @@ interface AppState {
   settings: Settings;
   workOrders: ImportedWorkOrders | null;
 
+  /**
+   * ISO timestamp of the last successful state sync (write OR apply).
+   * Used by the UI to show "synced X minutes ago" and (in future) to
+   * detect when the on-disk file is older than what's local.
+   */
+  lastSyncedAt: string | null;
+  /**
+   * Most recent sync error message, or null if the last sync succeeded.
+   * Surfaced in Settings so the user knows when auto-sync is silently
+   * failing (e.g. browser revoked the folder permission).
+   */
+  syncError: string | null;
+
   // Project CRUD
   addProject: (p: Project) => void;
   updateProject: (id: string, patch: Partial<Project>) => void;
@@ -69,6 +82,21 @@ interface AppState {
 
   // Bulk import/export
   replaceAll: (data: { projects: Project[]; settings: Settings }) => void;
+
+  /**
+   * Apply a payload pulled from the cross-device sync file (see
+   * lib/sync.ts). Replaces projects, settings, and workOrders with the
+   * synced values; marks `lastSyncedAt` with the source's timestamp.
+   * Intentionally separate from `replaceAll` because it also touches
+   * workOrders and lastSyncedAt — exposing both keeps the JSON
+   * backup/restore path and the cross-device sync path distinct.
+   */
+  applySyncedState: (data: {
+    projects: Project[];
+    settings: Settings;
+    workOrders: ImportedWorkOrders | null;
+    syncedAt: string;
+  }) => void;
 }
 
 const defaultSettings: Settings = {
@@ -82,6 +110,8 @@ const defaultSettings: Settings = {
   securityEmail: '',
   securityPreamble: DEFAULT_SECURITY_PREAMBLE,
   securityCcSelf: true,
+  syncEnabled: false,
+  syncFilename: 'mwpjm-state.json',
 };
 
 function touch(p: Project): Project {
@@ -94,6 +124,8 @@ export const useStore = create<AppState>()(
       projects: [],
       settings: defaultSettings,
       workOrders: null,
+      lastSyncedAt: null,
+      syncError: null,
 
       addProject: (p) =>
         set((s) => ({ projects: [p, ...s.projects] })),
@@ -285,6 +317,15 @@ export const useStore = create<AppState>()(
         set(() => ({
           projects: data.projects,
           settings: { ...defaultSettings, ...data.settings },
+        })),
+
+      applySyncedState: (data) =>
+        set(() => ({
+          projects: data.projects,
+          settings: { ...defaultSettings, ...data.settings },
+          workOrders: data.workOrders,
+          lastSyncedAt: data.syncedAt,
+          syncError: null,
         })),
     }),
     {

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useStore } from '../state/store';
 import {
@@ -8,15 +8,39 @@ import {
 } from '../lib/exporters';
 import { DEFAULT_NUVOLO_EMAIL, DEFAULT_WO_URL_PATTERN } from '../lib/nuvolo';
 import { BUILD_TIME, forceAppUpdate } from '../lib/appUpdate';
+import {
+  getStoredFolderName,
+  isFolderApiSupported,
+} from '../lib/folderConnection';
+import {
+  applySyncedState,
+  DEFAULT_SYNC_FILENAME,
+  pullFromFile,
+  pullFromFolder,
+  pushNow,
+  type SyncPayload,
+} from '../lib/sync';
+import { formatDateTime } from '../lib/format';
 
 export default function SettingsPage() {
   const settings = useStore((s) => s.settings);
   const setSettings = useStore((s) => s.setSettings);
   const projects = useStore((s) => s.projects);
   const replaceAll = useStore((s) => s.replaceAll);
+  const lastSyncedAt = useStore((s) => s.lastSyncedAt);
+  const syncError = useStore((s) => s.syncError);
 
   const fileRef = useRef<HTMLInputElement>(null);
+  const syncFileRef = useRef<HTMLInputElement>(null);
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [connectedFolder, setConnectedFolder] = useState<string | undefined>();
+  const [busy, setBusy] = useState<'push' | 'pull' | null>(null);
+  const folderApi = isFolderApiSupported();
+
+  useEffect(() => {
+    getStoredFolderName().then(setConnectedFolder);
+  }, []);
 
   function exportBackup() {
     const data = buildAppData(projects, settings);
@@ -35,6 +59,81 @@ export default function SettingsPage() {
     } catch (e) {
       setImportMsg(`Import failed: ${(e as Error).message}`);
     }
+  }
+
+  async function pushSyncNow() {
+    setSyncMsg(null);
+    setBusy('push');
+    try {
+      const payload = await pushNow(settings.syncFilename || DEFAULT_SYNC_FILENAME);
+      setSyncMsg(
+        `Pushed ${payload.projects.length} project(s) to "${settings.syncFilename || DEFAULT_SYNC_FILENAME}".`,
+      );
+    } catch (e) {
+      setSyncMsg(`Push failed: ${(e as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function pullSyncFromFolder() {
+    setSyncMsg(null);
+    setBusy('pull');
+    try {
+      const payload = await pullFromFolder(
+        settings.syncFilename || DEFAULT_SYNC_FILENAME,
+      );
+      if (!payload) {
+        setSyncMsg(
+          `No "${settings.syncFilename || DEFAULT_SYNC_FILENAME}" found in the connected folder yet. Push from another device first, or wait for OneDrive to sync.`,
+        );
+        return;
+      }
+      applyAfterConfirm(payload, 'connected folder');
+    } catch (e) {
+      setSyncMsg(`Pull failed: ${(e as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function pullSyncFromFile(file: File) {
+    setSyncMsg(null);
+    setBusy('pull');
+    try {
+      const payload = await pullFromFile(file);
+      applyAfterConfirm(payload, file.name);
+    } catch (e) {
+      setSyncMsg(`Pull failed: ${(e as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function applyAfterConfirm(payload: SyncPayload, source: string) {
+    const ok = window.confirm(
+      `Replace local state with the version from ${source}?\n\n` +
+        `Synced: ${formatDateTime(payload.syncedAt)}\n` +
+        `Projects: ${payload.projects.length}\n` +
+        (payload.workOrders
+          ? `Work orders: ${payload.workOrders.rows.length} (${payload.workOrders.sourceFilename})\n`
+          : 'Work orders: none\n') +
+        `\nAny edits made on this device since the last sync will be lost.`,
+    );
+    if (!ok) {
+      setSyncMsg('Pull cancelled — local state unchanged.');
+      return;
+    }
+    applySyncedState(payload);
+    setSyncMsg(
+      `Applied ${payload.projects.length} project(s) from ${source}.`,
+    );
+  }
+
+  function syncStatusLine(): string {
+    if (syncError) return `Last error: ${syncError}`;
+    if (!lastSyncedAt) return 'Never synced from this device.';
+    return `Last synced ${formatDateTime(lastSyncedAt)}`;
   }
 
   return (
@@ -216,11 +315,134 @@ export default function SettingsPage() {
       </section>
 
       <section className="card p-4 space-y-3">
+        <div>
+          <h2 className="font-semibold">Sync state via OneDrive</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Auto-write a JSON snapshot of your projects, settings, and last
+            imported work-order CSV to the connected folder. OneDrive
+            replicates it to your other devices, where you can pull the
+            latest with one tap. <strong>Photos stay on the device that
+            took them</strong> — they're too big to ship through this
+            channel; only the captions / filenames travel.
+          </p>
+        </div>
+
+        {!folderApi && (
+          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
+            <strong>Auto-sync isn't supported on this browser.</strong> On
+            iPhone Safari and mobile Chrome, use <em>Pull from file…</em> below
+            to import a synced state file you've opened from the OneDrive
+            app.
+          </div>
+        )}
+
+        {folderApi && !connectedFolder && (
+          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
+            Connect a folder on{' '}
+            <Link to="/reports" className="text-brand-600 hover:underline">
+              Reports → Connect folder
+            </Link>{' '}
+            first. The sync file lives in that same folder, next to your
+            CSV exports.
+          </div>
+        )}
+
+        {folderApi && connectedFolder && (
+          <>
+            <div className="text-xs text-slate-500">
+              Folder:{' '}
+              <span className="pill bg-emerald-100 text-emerald-800">
+                ✓ {connectedFolder}
+              </span>
+            </div>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                checked={settings.syncEnabled}
+                onChange={(e) =>
+                  setSettings({ syncEnabled: e.target.checked })
+                }
+              />
+              <span>
+                <strong>Auto-sync to this folder</strong> — write the latest
+                state file every time something changes. Recommended on the
+                desktop you use most.
+              </span>
+            </label>
+          </>
+        )}
+
+        <div>
+          <label className="label">Sync file name</label>
+          <input
+            className="input font-mono text-xs"
+            value={settings.syncFilename}
+            placeholder={DEFAULT_SYNC_FILENAME}
+            onChange={(e) => setSettings({ syncFilename: e.target.value })}
+          />
+          <p className="text-[11px] text-slate-500 mt-1">
+            Defaults to <code>{DEFAULT_SYNC_FILENAME}</code>. All devices
+            should agree on the same filename.
+          </p>
+        </div>
+
+        <div className="text-xs text-slate-600">{syncStatusLine()}</div>
+
+        <div className="flex flex-wrap gap-2">
+          {folderApi && connectedFolder && (
+            <>
+              <button
+                className="btn-primary text-sm"
+                onClick={pushSyncNow}
+                disabled={busy !== null}
+                title="Write the current state to the connected folder right now"
+              >
+                {busy === 'push' ? 'Pushing…' : '↑ Push now'}
+              </button>
+              <button
+                className="btn-secondary text-sm"
+                onClick={pullSyncFromFolder}
+                disabled={busy !== null}
+                title="Read the sync file from the connected folder and apply it"
+              >
+                {busy === 'pull' ? 'Pulling…' : '↓ Pull from folder'}
+              </button>
+            </>
+          )}
+          <button
+            className="btn-secondary text-sm"
+            onClick={() => syncFileRef.current?.click()}
+            disabled={busy !== null}
+            title="Pick a sync file from your device (works everywhere — use this on mobile)"
+          >
+            Pull from file…
+          </button>
+          <input
+            ref={syncFileRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) pullSyncFromFile(f);
+              e.target.value = '';
+            }}
+          />
+        </div>
+
+        {syncMsg && (
+          <p className="text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded p-2">
+            {syncMsg}
+          </p>
+        )}
+      </section>
+
+      <section className="card p-4 space-y-3">
+        <h2 className="font-semibold">Manual backup</h2>
         <p className="text-sm text-slate-600">
-          The app stores everything locally on this device. To share data
-          between your laptop and phone, export a backup file into a folder
-          that OneDrive (or another cloud drive) syncs, then Import it on the
-          other device.
+          One-shot export and import. Useful for archiving a snapshot, or
+          bootstrapping a new device before you've set up sync above.
         </p>
         <div className="flex flex-wrap gap-2">
           <button className="btn-primary" onClick={exportBackup}>
@@ -250,9 +472,9 @@ export default function SettingsPage() {
           </p>
         )}
         <p className="text-xs text-slate-500">
-          Tip: save the backup file to e.g. <code>OneDrive/MWPJM/mwpjm.json</code>{' '}
-          so it auto-syncs to your phone. On the phone, open the file from the
-          OneDrive app and use Import here.
+          For the everyday "what did I just open on the desktop" case, prefer
+          the auto-sync section above. This manual flow is for one-off
+          snapshots and migrating between accounts.
         </p>
       </section>
 

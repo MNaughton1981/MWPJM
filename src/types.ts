@@ -136,6 +136,20 @@ export interface Settings {
   securityPreamble: string;
   /** When true, CC the user (settings.userEmail) on security notifications. */
   securityCcSelf: boolean;
+  /**
+   * When true (and the File System Access API is available), the app
+   * writes a JSON snapshot of state to the connected folder every time
+   * something changes — debounced. OneDrive then replicates that file
+   * to the user's other devices, where they can pull it on demand.
+   * Off by default; only meaningful on Chromium desktop browsers.
+   */
+  syncEnabled: boolean;
+  /**
+   * Filename used for the cross-device state sync file inside the
+   * connected folder. Defaults to `mwpjm-state.json`. Lives next to
+   * the user's CSV exports — OneDrive doesn't care.
+   */
+  syncFilename: string;
 }
 
 export interface AppData {
