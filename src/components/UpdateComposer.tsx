@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Project } from '../types';
 import { buildNuvoloMail, isValidWorkOrderId } from '../lib/nuvolo';
 import { useStore } from '../state/store';
@@ -264,6 +264,19 @@ export default function UpdateComposer({ project }: Props) {
             {isMobile
               ? 'Or dictate into Google Docs / Notes and paste here.'
               : 'Tip: dictate into Google Docs / Notes on your phone, sync, and paste here.'}
+          placeholder="What happened today? (e.g. Plumber on site, rough-in complete, awaiting electrical inspection.)"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        {/* OS-level dictation hint — Gboard's mic and iOS Voice Control
+            both write directly into a normal textarea with much better
+            quality than anything we could do via Web Speech API. The
+            paste action covers the "dictate elsewhere, drop it in here"
+            workflow when the hand-off is more convenient. */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <p className="text-[11px] text-slate-500">
+            Tip: tap your keyboard's mic button to dictate (Gboard /
+            iOS keyboard), or dictate into Google Docs / Notes and 📋 Paste.
           </p>
           <button
             type="button"
