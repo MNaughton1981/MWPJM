@@ -8,6 +8,7 @@ import { isValidWorkOrderId } from '../lib/nuvolo';
 import TimetableSection from '../components/TimetableSection';
 import TradeTrackerSection from '../components/TradeTrackerSection';
 import ActivityLogSection from '../components/ActivityLogSection';
+import PhotosSection from '../components/PhotosSection';
 import UpdateComposer from '../components/UpdateComposer';
 import { downloadText, projectToMarkdown } from '../lib/exporters';
 
@@ -145,6 +146,8 @@ export default function ProjectPage() {
         projectId={project.id}
         milestones={project.milestones}
       />
+
+      <PhotosSection project={project} />
 
       <ActivityLogSection
         projectId={project.id}

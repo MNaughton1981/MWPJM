@@ -4,12 +4,17 @@ import type {
   ActivityEntry,
   Milestone,
   Project,
+  ProjectPhoto,
   ProjectStatus,
   Settings,
   Trade,
 } from '../types';
 import type { ImportedWorkOrders } from '../lib/workOrderCsv';
 import { DEFAULT_NUVOLO_EMAIL } from '../lib/nuvolo';
+import {
+  DEFAULT_PHOTO_NAMING_PATTERN,
+  deleteProjectPhotos,
+} from '../lib/photoStorage';
 import { uid } from '../lib/format';
 
 interface AppState {
@@ -36,6 +41,15 @@ interface AppState {
   addActivity: (projectId: string, entry: Omit<ActivityEntry, 'id'>) => void;
   removeActivity: (projectId: string, entryId: string) => void;
 
+  // Photos (metadata only — blobs live in IndexedDB)
+  addPhotoMeta: (projectId: string, photo: ProjectPhoto) => void;
+  updatePhotoMeta: (
+    projectId: string,
+    photoId: string,
+    patch: Partial<ProjectPhoto>,
+  ) => void;
+  removePhotoMeta: (projectId: string, photoId: string) => void;
+
   // Settings
   setSettings: (patch: Partial<Settings>) => void;
 
@@ -51,6 +65,8 @@ const defaultSettings: Settings = {
   nuvoloEmail: DEFAULT_NUVOLO_EMAIL,
   reportFolderPath:
     'C:\\Users\\mnaughto\\OneDrive - MathWorks\\Projects\\Nuvolo Dev\\fegpjm\\reports\\open_work_orders',
+  photoNamingPattern: DEFAULT_PHOTO_NAMING_PATTERN,
+  userEmail: '',
 };
 
 function touch(p: Project): Project {
@@ -74,8 +90,12 @@ export const useStore = create<AppState>()(
           ),
         })),
 
-      deleteProject: (id) =>
-        set((s) => ({ projects: s.projects.filter((p) => p.id !== id) })),
+      deleteProject: (id) => {
+        // Fire-and-forget cleanup of any photos in IndexedDB. We don't
+        // block the UI on this; if it fails the orphaned blobs are harmless.
+        deleteProjectPhotos(id).catch(() => undefined);
+        set((s) => ({ projects: s.projects.filter((p) => p.id !== id) }));
+      },
 
       addTrade: (projectId, t) =>
         set((s) => ({
@@ -163,6 +183,41 @@ export const useStore = create<AppState>()(
               ? touch({
                   ...p,
                   activity: p.activity.filter((a) => a.id !== entryId),
+                })
+              : p,
+          ),
+        })),
+
+      addPhotoMeta: (projectId, photo) =>
+        set((s) => ({
+          projects: s.projects.map((p) =>
+            p.id === projectId
+              ? touch({ ...p, photos: [...(p.photos ?? []), photo] })
+              : p,
+          ),
+        })),
+
+      updatePhotoMeta: (projectId, photoId, patch) =>
+        set((s) => ({
+          projects: s.projects.map((p) =>
+            p.id === projectId
+              ? touch({
+                  ...p,
+                  photos: (p.photos ?? []).map((ph) =>
+                    ph.id === photoId ? { ...ph, ...patch } : ph,
+                  ),
+                })
+              : p,
+          ),
+        })),
+
+      removePhotoMeta: (projectId, photoId) =>
+        set((s) => ({
+          projects: s.projects.map((p) =>
+            p.id === projectId
+              ? touch({
+                  ...p,
+                  photos: (p.photos ?? []).filter((ph) => ph.id !== photoId),
                 })
               : p,
           ),

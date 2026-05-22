@@ -41,6 +41,20 @@ export interface ActivityEntry {
   author?: string;
 }
 
+/**
+ * Photo metadata. Binary data is stored separately in IndexedDB
+ * (see src/lib/photoStorage.ts) keyed by `${projectId}/${photoId}`.
+ */
+export interface ProjectPhoto {
+  id: string;
+  mimeType: string;
+  originalName: string;
+  caption: string;
+  capturedAt: string; // ISO datetime
+  addedAt: string; // ISO datetime
+  size: number; // bytes
+}
+
 export type ProjectStatus =
   | 'planning'
   | 'in_progress'
@@ -59,6 +73,7 @@ export interface Project {
   trades: Trade[];
   milestones: Milestone[];
   activity: ActivityEntry[];
+  photos: ProjectPhoto[];
 }
 
 export interface Settings {
@@ -71,6 +86,17 @@ export interface Settings {
    * is via the File System Access API (see folderConnection.ts).
    */
   reportFolderPath: string;
+  /**
+   * Template used when generating a downloadable filename for a photo.
+   * Supported placeholders: {wo} {project} {date} {caption} {seq} {ext}.
+   */
+  photoNamingPattern: string;
+  /**
+   * The user's own email — used as the To: for the "Add to To Do"
+   * action so flagged messages flow into Microsoft To Do. Optional;
+   * if blank the mail client opens with an empty To: field.
+   */
+  userEmail: string;
 }
 
 export interface AppData {
