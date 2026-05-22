@@ -87,6 +87,25 @@ export default function SettingsPage() {
             in the subject line.
           </p>
         </div>
+        <div>
+          <label className="label">Work order URL pattern (for clickable FWKD links)</label>
+          <input
+            className="input font-mono text-xs"
+            placeholder="https://mathworks.service-now.com/...?number={wo}"
+            value={settings.nuvoloWorkOrderUrlPattern}
+            onChange={(e) =>
+              setSettings({ nuvoloWorkOrderUrlPattern: e.target.value })
+            }
+          />
+          <p className="text-xs text-slate-500 mt-1">
+            Determines what happens when you click a FWKD link in the app.
+            <strong> To get the right URL:</strong> open a real WO in Nuvolo on
+            your laptop, copy the URL from the address bar, and paste it here
+            with the FWKD number replaced by <code>{'{wo}'}</code>. On Android,
+            if the Nuvolo mobile app has registered <code>service-now.com</code>{' '}
+            links, tapping a FWKD link will offer to open it in the app.
+          </p>
+        </div>
       </section>
 
       <section className="card p-4 space-y-3">

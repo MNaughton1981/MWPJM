@@ -4,7 +4,7 @@ import {
   PROJECT_STATUS_LABELS,
   type ProjectStatus,
 } from '../types';
-import { isValidWorkOrderId } from '../lib/nuvolo';
+import { buildWorkOrderUrl, isValidWorkOrderId } from '../lib/nuvolo';
 import TimetableSection from '../components/TimetableSection';
 import TradeTrackerSection from '../components/TradeTrackerSection';
 import ActivityLogSection from '../components/ActivityLogSection';
@@ -18,6 +18,7 @@ export default function ProjectPage() {
   const project = useStore((s) => s.projects.find((p) => p.id === id));
   const updateProject = useStore((s) => s.updateProject);
   const deleteProject = useStore((s) => s.deleteProject);
+  const woUrlPattern = useStore((s) => s.settings.nuvoloWorkOrderUrlPattern);
 
   if (!project) {
     return (
@@ -31,6 +32,7 @@ export default function ProjectPage() {
   }
 
   const woValid = isValidWorkOrderId(project.workOrderId);
+  const woUrl = woValid ? buildWorkOrderUrl(project.workOrderId, woUrlPattern) : null;
 
   function exportMarkdown() {
     const md = projectToMarkdown(project!);
@@ -98,6 +100,17 @@ export default function ProjectPage() {
               <p className="text-xs text-rose-600 mt-1">
                 Expected format: FWKD followed by digits.
               </p>
+            )}
+            {woUrl && (
+              <a
+                href={woUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-brand-600 hover:underline mt-1 inline-flex items-center gap-1"
+                title="Opens in your Nuvolo / ServiceNow tab (or the Nuvolo mobile app if it's installed and registered for service-now.com links)"
+              >
+                Open {project.workOrderId} in Nuvolo →
+              </a>
             )}
           </div>
           <div>

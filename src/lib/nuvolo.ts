@@ -45,3 +45,29 @@ export function isValidWorkOrderId(s: string | undefined): boolean {
   if (!s) return false;
   return /^FWKD\d+$/i.test(s.trim());
 }
+
+/**
+ * Sensible default URL pattern for navigating to a ServiceNow / Nuvolo
+ * work order by its number. The user can override in Settings if their
+ * MathWorks instance uses a different domain or table — the easiest way
+ * is to open a real WO in the browser, copy the URL, and paste it here
+ * with the FWKD number replaced by `{wo}`.
+ */
+export const DEFAULT_WO_URL_PATTERN =
+  'https://mathworks.service-now.com/sow_work_order.do?sysparm_query=number={wo}';
+
+/**
+ * Resolve a configured URL pattern into a real link for a given work
+ * order. Returns null if the pattern is empty or doesn't include {wo}.
+ */
+export function buildWorkOrderUrl(
+  workOrderId: string | undefined,
+  pattern: string | undefined,
+): string | null {
+  if (!workOrderId || !pattern) return null;
+  if (!pattern.includes('{wo}')) return null;
+  return pattern.replace(
+    /\{wo\}/g,
+    encodeURIComponent(workOrderId.trim().toUpperCase()),
+  );
+}

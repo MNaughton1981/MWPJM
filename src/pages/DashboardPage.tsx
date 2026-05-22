@@ -7,6 +7,7 @@ import {
   isOverdue,
   type WorkOrder,
 } from '../lib/workOrderCsv';
+import { buildWorkOrderUrl } from '../lib/nuvolo';
 import { formatDateTime } from '../lib/format';
 
 /**
@@ -16,6 +17,7 @@ import { formatDateTime } from '../lib/format';
 export default function DashboardPage() {
   const workOrders = useStore((s) => s.workOrders);
   const addProject = useStore((s) => s.addProject);
+  const woUrlPattern = useStore((s) => s.settings.nuvoloWorkOrderUrlPattern);
   const navigate = useNavigate();
   const [filter, setFilter] = useState('');
   const [stateFilter, setStateFilter] = useState<string>('');
@@ -202,7 +204,26 @@ export default function DashboardPage() {
                     className="border-b last:border-0 hover:bg-slate-50"
                   >
                     <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">
-                      {r.number || '—'}
+                      {r.number ? (
+                        (() => {
+                          const url = buildWorkOrderUrl(r.number, woUrlPattern);
+                          return url ? (
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-brand-600 hover:underline"
+                              title="Open this work order in Nuvolo"
+                            >
+                              {r.number}
+                            </a>
+                          ) : (
+                            r.number
+                          );
+                        })()
+                      ) : (
+                        '—'
+                      )}
                     </td>
                     <td className="px-3 py-2">{r.shortDescription || '—'}</td>
                     <td className="px-3 py-2">
