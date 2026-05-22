@@ -290,6 +290,23 @@ export const useStore = create<AppState>()(
     {
       name: 'mwpjm-store-v1',
       version: 1,
+      // Custom merge so newly-added settings fields are backfilled from
+      // defaults when an older persisted state is rehydrated. Without
+      // this, adding a Settings field (e.g. `securityEmail`) and then
+      // calling `.trim()` on it crashed the project page for users
+      // whose localStorage predated the field. Top-level state (projects,
+      // workOrders) keeps the persisted values; settings are deep-merged.
+      merge: (persisted, current) => {
+        const p = (persisted as Partial<AppState>) ?? {};
+        return {
+          ...current,
+          ...p,
+          settings: {
+            ...current.settings,
+            ...(p.settings ?? {}),
+          },
+        };
+      },
     },
   ),
 );

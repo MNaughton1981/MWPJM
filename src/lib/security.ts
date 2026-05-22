@@ -73,7 +73,9 @@ export function buildSecurityNotification(
   lines.push(`[Sent ${ts} via MWPJM]`);
 
   const body = lines.join('\n');
-  const to = args.securityEmail.trim();
+  // Defensive trims — these arguments may have been undefined in older
+  // persisted state before the persist `merge` backfilled defaults.
+  const to = (args.securityEmail ?? '').trim();
   const cc = args.ccEmail?.trim();
 
   const params = new URLSearchParams();
