@@ -84,22 +84,41 @@ export function createVoiceInput(cb: VoiceCallbacks): VoiceController | null {
   r.interimResults = true;
   r.lang = cb.lang ?? 'en-US';
 
+  // Track which result indices we've already committed as final.
+  // Pixel/Android Chrome doesn't always advance event.resultIndex correctly,
+  // so trusting it caused the "Joe Joe Joe Joe Warren Joe Warren..." echo
+  // pattern. We iterate all results every event but only emit ones we
+  // haven't seen committed yet.
+  let lastCommittedIndex = -1;
+
   r.onresult = (event) => {
     let interim = '';
-    let finalText = '';
-    for (let i = event.resultIndex; i < event.results.length; i++) {
+    let newFinal = '';
+    for (let i = 0; i < event.results.length; i++) {
       const result = event.results[i];
-      if (result.isFinal) finalText += result[0].transcript;
-      else interim += result[0].transcript;
+      if (result.isFinal) {
+        if (i > lastCommittedIndex) {
+          newFinal += result[0].transcript;
+          lastCommittedIndex = i;
+        }
+      } else {
+        interim += result[0].transcript;
+      }
     }
-    if (finalText) cb.onAppendFinal(finalText);
-    if (interim) cb.onInterim(interim);
+    if (newFinal) cb.onAppendFinal(newFinal);
+    // Always call onInterim, even with '', so stale interim text clears
+    // when the engine moves a phrase from interim → final.
+    cb.onInterim(interim);
   };
   r.onerror = (event) => cb.onError(event.error || 'unknown');
   r.onend = cb.onEnd;
 
   return {
-    start: () => r.start(),
+    start: () => {
+      // Reset committed-index tracking for each new dictation session.
+      lastCommittedIndex = -1;
+      r.start();
+    },
     stop: () => r.stop(),
     destroy: () => {
       r.onresult = null;

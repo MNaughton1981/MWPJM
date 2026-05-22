@@ -97,6 +97,14 @@ export interface Settings {
    * if blank the mail client opens with an empty To: field.
    */
   userEmail: string;
+  /**
+   * URL pattern for opening a Nuvolo / ServiceNow work order by number.
+   * `{wo}` is replaced by the FWKD ID at render time. Used to render the
+   * Work Order ID as a clickable link from project pages and dashboard
+   * rows. Override per-tenant — the easiest way is to copy a real WO
+   * URL from your browser and substitute the number with `{wo}`.
+   */
+  nuvoloWorkOrderUrlPattern: string;
 }
 
 export interface AppData {

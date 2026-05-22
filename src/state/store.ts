@@ -10,7 +10,7 @@ import type {
   Trade,
 } from '../types';
 import type { ImportedWorkOrders } from '../lib/workOrderCsv';
-import { DEFAULT_NUVOLO_EMAIL } from '../lib/nuvolo';
+import { DEFAULT_NUVOLO_EMAIL, DEFAULT_WO_URL_PATTERN } from '../lib/nuvolo';
 import {
   DEFAULT_PHOTO_NAMING_PATTERN,
   deleteProjectPhotos,
@@ -67,6 +67,7 @@ const defaultSettings: Settings = {
     'C:\\Users\\mnaughto\\OneDrive - MathWorks\\Projects\\Nuvolo Dev\\fegpjm\\reports\\open_work_orders',
   photoNamingPattern: DEFAULT_PHOTO_NAMING_PATTERN,
   userEmail: '',
+  nuvoloWorkOrderUrlPattern: DEFAULT_WO_URL_PATTERN,
 };
 
 function touch(p: Project): Project {
