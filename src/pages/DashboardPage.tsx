@@ -24,7 +24,10 @@ export default function DashboardPage() {
   const [priorityFilter, setPriorityFilter] = useState<string>('');
 
   function startProjectFromWO(wo: WorkOrder) {
-    const tpl = TEMPLATES[0];
+    // Default to the lightweight Work Order Follow-up template — quick
+    // tracking, no trades / timetable. User can flip to "full" later
+    // from the project page if they need that scope.
+    const tpl = TEMPLATES.find((t) => t.id === 'work-order-followup') ?? TEMPLATES[0];
     const name = wo.shortDescription || wo.number || 'New project';
     const project = tpl.build(name);
     project.workOrderId = wo.number.toUpperCase();

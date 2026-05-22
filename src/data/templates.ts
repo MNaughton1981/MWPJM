@@ -1,24 +1,64 @@
 import type { Project } from '../types';
 import { uid } from '../lib/format';
 
-/**
- * Seed project: 18" dishwasher addition alongside existing 24" DW.
- * Mirrors the kitchenette pilot scope (demo base cabinet, add framing,
- * plumb + electrical rough-in, set unit, trim, test).
- */
-export function buildDishwasherUpgradeTemplate(name: string): Project {
+function emptyCommon(name: string): Pick<
+  Project,
+  | 'id'
+  | 'name'
+  | 'status'
+  | 'createdAt'
+  | 'updatedAt'
+  | 'trades'
+  | 'milestones'
+  | 'activity'
+  | 'photos'
+  | 'vendors'
+> {
   const now = new Date().toISOString();
   return {
     id: uid(),
     name,
+    status: 'planning',
+    createdAt: now,
+    updatedAt: now,
+    trades: [],
+    milestones: [],
+    activity: [],
+    photos: [],
+    vendors: [],
+  };
+}
+
+/**
+ * Default template — a lightweight "Work Order Follow-up" with no
+ * trades or milestones, just notes/photos/vendor info. The Project
+ * page hides the trade-coordination and timetable sections when
+ * `simple: true`.
+ */
+export function buildWorkOrderFollowupTemplate(name: string): Project {
+  return {
+    ...emptyCommon(name),
+    workOrderId: '',
+    description: '',
+    simple: true,
+  };
+}
+
+/**
+ * Full-scope template: 18" dishwasher addition alongside existing 24" DW.
+ * Mirrors the kitchenette pilot scope (demo base cabinet, add framing,
+ * plumb + electrical rough-in, set unit, trim, test).
+ */
+export function buildDishwasherUpgradeTemplate(name: string): Project {
+  const base = emptyCommon(name);
+  return {
+    ...base,
     location: 'Kitchenette — TBD',
     workOrderId: '',
     description:
       'Add 18" dishwasher alongside existing 24" dishwasher. Remove a base cabinet ' +
       'segment and add wood framing to accommodate the new unit. Pilot-style scope.',
-    status: 'planning',
-    createdAt: now,
-    updatedAt: now,
+    simple: false,
     trades: [
       {
         id: uid(),
@@ -56,8 +96,6 @@ export function buildDishwasherUpgradeTemplate(name: string): Project {
       { id: uid(), title: 'Punch list & final walkthrough', done: false, trade: 'general' },
       { id: uid(), title: 'Close work order', done: false, trade: 'general' },
     ],
-    activity: [],
-    photos: [],
   };
 }
 
@@ -70,29 +108,26 @@ export interface TemplateInfo {
 
 export const TEMPLATES: TemplateInfo[] = [
   {
+    id: 'work-order-followup',
+    name: 'Work Order Follow-up',
+    description:
+      'Lightweight project: notes, photos, vendor contacts. No trades or timetable. Default for quick WO tracking.',
+    build: buildWorkOrderFollowupTemplate,
+  },
+  {
     id: 'dishwasher-upgrade',
     name: 'Kitchenette Dishwasher Upgrade (18" + 24")',
     description:
-      'Add an 18" dishwasher alongside an existing 24" unit. Carpentry + plumbing + electrical scope.',
+      'Full-scope project with trades + milestones for the kitchenette pilot.',
     build: buildDishwasherUpgradeTemplate,
   },
   {
     id: 'blank',
     name: 'Blank Project',
-    description: 'Start from scratch with empty trades and milestones.',
-    build: (name: string) => {
-      const now = new Date().toISOString();
-      return {
-        id: uid(),
-        name,
-        status: 'planning',
-        createdAt: now,
-        updatedAt: now,
-        trades: [],
-        milestones: [],
-        activity: [],
-        photos: [],
-      };
-    },
+    description: 'Start from scratch. Lightweight by default.',
+    build: (name: string) => ({
+      ...emptyCommon(name),
+      simple: true,
+    }),
   },
 ];

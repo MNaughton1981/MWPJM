@@ -109,6 +109,45 @@ export default function SettingsPage() {
       </section>
 
       <section className="card p-4 space-y-3">
+        <h2 className="font-semibold">Security team notifications</h2>
+        <div>
+          <label className="label">Security team email</label>
+          <input
+            className="input"
+            type="email"
+            placeholder="security@mathworks.com"
+            value={settings.securityEmail}
+            onChange={(e) => setSettings({ securityEmail: e.target.value })}
+          />
+          <p className="text-xs text-slate-500 mt-1">
+            Where the per-vendor "🛡️ Notify security" button sends its
+            structured visit-notice email. If blank, the button is disabled.
+          </p>
+        </div>
+        <div>
+          <label className="label">Preamble (top of every notification)</label>
+          <textarea
+            className="input min-h-[60px]"
+            value={settings.securityPreamble}
+            onChange={(e) => setSettings({ securityPreamble: e.target.value })}
+          />
+          <p className="text-xs text-slate-500 mt-1">
+            Customize for your facility — include badge / FOB / specific
+            access instructions if helpful.
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+            checked={settings.securityCcSelf}
+            onChange={(e) => setSettings({ securityCcSelf: e.target.checked })}
+          />
+          CC me on security notifications (uses "Your email" above)
+        </label>
+      </section>
+
+      <section className="card p-4 space-y-3">
         <h2 className="font-semibold">Nuvolo report folder path</h2>
         <div>
           <label className="label">

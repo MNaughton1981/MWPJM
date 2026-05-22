@@ -105,6 +105,21 @@ export function projectToMarkdown(project: Project): string {
   }
   lines.push('');
 
+  const vendors = project.vendors ?? [];
+  if (vendors.length > 0) {
+    lines.push('## Vendors / contacts');
+    for (const v of vendors) {
+      const company = v.company ? ` — ${v.company}` : '';
+      const role = v.role ? ` (${v.role})` : '';
+      lines.push(`- **${v.name || '(unnamed)'}**${company}${role}`);
+      if (v.phone) lines.push(`  - Phone: ${v.phone}`);
+      if (v.email) lines.push(`  - Email: ${v.email}`);
+      if (v.visitDate) lines.push(`  - Visit: ${formatDate(v.visitDate)}`);
+      if (v.notes) lines.push(`  - Notes: ${v.notes}`);
+    }
+    lines.push('');
+  }
+
   const photos = project.photos ?? [];
   if (photos.length > 0) {
     lines.push('## Photos');
