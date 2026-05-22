@@ -4,6 +4,7 @@ import { useStore } from '../state/store';
 import { TEMPLATES } from '../data/templates';
 import { PROJECT_STATUS_LABELS } from '../types';
 import { formatDateTime } from '../lib/format';
+import SyncQuickActions from '../components/SyncQuickActions';
 
 export default function ProjectsPage() {
   const projects = useStore((s) => s.projects);
@@ -35,11 +36,19 @@ export default function ProjectsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-xl font-semibold">Dashboard</h1>
-        <button className="btn-primary" onClick={() => setShowNew((v) => !v)}>
-          {showNew ? 'Cancel' : '+ New project'}
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Quick sync controls so the user doesn't have to hop into
+              Settings just to pull the latest state from the desktop or
+              push from the desktop on demand. The component adapts to
+              the device — only renders the buttons that can actually
+              do something there. */}
+          <SyncQuickActions />
+          <button className="btn-primary" onClick={() => setShowNew((v) => !v)}>
+            {showNew ? 'Cancel' : '+ New project'}
+          </button>
+        </div>
       </div>
 
       {showNew && (
