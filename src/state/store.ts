@@ -11,7 +11,7 @@ import type {
   Vendor,
 } from '../types';
 import type { ImportedWorkOrders } from '../lib/workOrderCsv';
-import { DEFAULT_NUVOLO_EMAIL, DEFAULT_WO_URL_PATTERN } from '../lib/nuvolo';
+import { DEFAULT_NUVOLO_EMAIL, DEFAULT_WO_URL_PATTERN, LEGACY_WO_URL_PATTERNS } from '../lib/nuvolo';
 import {
   DEFAULT_PHOTO_NAMING_PATTERN,
   deleteProjectPhotos,
@@ -296,15 +296,28 @@ export const useStore = create<AppState>()(
       // calling `.trim()` on it crashed the project page for users
       // whose localStorage predated the field. Top-level state (projects,
       // workOrders) keeps the persisted values; settings are deep-merged.
+      //
+      // Also auto-upgrades any setting that's still on a previously-
+      // shipped default that we've since fixed (e.g. the WO URL pattern
+      // moved from the wrong `sow_work_order` table to the correct
+      // `x_nuvo_eam_facilities_work_orders` table). User customizations
+      // are detected by inequality with every known legacy default and
+      // are always preserved.
       merge: (persisted, current) => {
         const p = (persisted as Partial<AppState>) ?? {};
+        const mergedSettings: Settings = {
+          ...current.settings,
+          ...(p.settings ?? {}),
+        };
+        if (
+          LEGACY_WO_URL_PATTERNS.includes(mergedSettings.nuvoloWorkOrderUrlPattern)
+        ) {
+          mergedSettings.nuvoloWorkOrderUrlPattern = DEFAULT_WO_URL_PATTERN;
+        }
         return {
           ...current,
           ...p,
-          settings: {
-            ...current.settings,
-            ...(p.settings ?? {}),
-          },
+          settings: mergedSettings,
         };
       },
     },

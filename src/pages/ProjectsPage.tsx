@@ -36,7 +36,7 @@ export default function ProjectsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Projects</h1>
+        <h1 className="text-xl font-semibold">Dashboard</h1>
         <button className="btn-primary" onClick={() => setShowNew((v) => !v)}>
           {showNew ? 'Cancel' : '+ New project'}
         </button>
@@ -88,10 +88,14 @@ export default function ProjectsPage() {
 
       {sorted.length === 0 ? (
         <div className="card p-8 text-center text-slate-500">
-          <p className="mb-2">No projects yet.</p>
+          <p className="mb-2">Nothing tracked yet.</p>
           <p className="text-sm">
-            Click <strong>+ New project</strong> and pick the{' '}
-            <em>Kitchenette Dishwasher Upgrade</em> template to get started.
+            Click <strong>+ New project</strong> above to start from a template,
+            or jump to{' '}
+            <Link to="/dashboard" className="text-brand-600 hover:underline">
+              Work Orders
+            </Link>{' '}
+            and pick a row to spin up a quick follow-up.
           </p>
         </div>
       ) : (

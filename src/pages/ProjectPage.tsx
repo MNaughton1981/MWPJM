@@ -27,7 +27,7 @@ export default function ProjectPage() {
       <div className="card p-6 text-center text-slate-500">
         <p>Project not found.</p>
         <Link to="/projects" className="btn-secondary mt-4">
-          ← Back to projects
+          ← Back to Dashboard
         </Link>
       </div>
     );
@@ -70,7 +70,7 @@ export default function ProjectPage() {
     <div className="space-y-4">
       <div>
         <Link to="/projects" className="text-sm text-brand-600 hover:underline">
-          ← All projects
+          ← Dashboard
         </Link>
       </div>
 
