@@ -108,6 +108,156 @@ export function parseCsvFile(
   });
 }
 
+/**
+ * Excel (.xlsx) parser. Lazy-loaded so the ~75 KB `read-excel-file`
+ * dependency only ships when an Excel file is actually selected.
+ *
+ * Returns the same `{ headers, rows }` shape as parseCsvFile so the rest
+ * of the import pipeline (autoDetectColumns + applyColumnMap) stays
+ * format-agnostic. Reads the first sheet only — Excel saves a CSV→XLSX
+ * round-trip as a single sheet, which covers the common failure mode
+ * (user double-clicks a CSV, Excel auto-converts on save).
+ */
+export async function parseXlsxFile(
+  file: File,
+): Promise<{ headers: string[]; rows: Record<string, string>[] }> {
+  const { readSheet } = await import('read-excel-file/universal');
+  const sheet = await readSheet(file);
+  if (!sheet || sheet.length === 0) return { headers: [], rows: [] };
+  const headerRow = sheet[0];
+  const headers = headerRow
+    .map((h) => (h === null || h === undefined ? '' : String(h).trim()))
+    .filter((h) => h.length > 0);
+  const rows: Record<string, string>[] = [];
+  for (let i = 1; i < sheet.length; i++) {
+    const row: Record<string, string> = {};
+    for (let j = 0; j < headers.length; j++) {
+      const v = sheet[i]?.[j];
+      row[headers[j]] =
+        v === null || v === undefined
+          ? ''
+          : v instanceof Date
+            ? v.toISOString().slice(0, 10)
+            : String(v);
+    }
+    rows.push(row);
+  }
+  return { headers, rows };
+}
+
+/**
+ * JSON parser for ServiceNow / Nuvolo work order exports.
+ *
+ * Accepts any of these shapes:
+ *   1. Top-level array:           [ { number: "FWKD…", … }, … ]
+ *   2. ServiceNow REST envelope:  { result: [ { number: "…", … }, … ] }
+ *   3. Common alternates:         { records: […] } | { data: […] } | { rows: […] }
+ *   4. ServiceNow display values: { number: { display_value: "FWKD…", value: "FWKD…" }, … }
+ *      — flattened to the display_value (falling back to value).
+ *
+ * Headers are computed as the union of keys across the first 50 records,
+ * which catches sparse fields without scanning the entire file.
+ */
+export async function parseJsonFile(
+  file: File,
+): Promise<{ headers: string[]; rows: Record<string, string>[] }> {
+  const text = await file.text();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error('File is not valid JSON.');
+  }
+  let records: Record<string, unknown>[];
+  if (Array.isArray(parsed)) {
+    records = parsed as Record<string, unknown>[];
+  } else if (parsed && typeof parsed === 'object') {
+    const obj = parsed as Record<string, unknown>;
+    const candidate =
+      (Array.isArray(obj.result) && (obj.result as unknown[])) ||
+      (Array.isArray(obj.records) && (obj.records as unknown[])) ||
+      (Array.isArray(obj.data) && (obj.data as unknown[])) ||
+      (Array.isArray(obj.rows) && (obj.rows as unknown[])) ||
+      null;
+    if (!candidate) {
+      throw new Error(
+        'JSON does not contain a top-level array or a "result" / "records" / "data" / "rows" array.',
+      );
+    }
+    records = candidate as Record<string, unknown>[];
+  } else {
+    throw new Error('JSON must be an array of records or an object with one.');
+  }
+  if (records.length === 0) return { headers: [], rows: [] };
+
+  const headerSet = new Set<string>();
+  const sampleSize = Math.min(records.length, 50);
+  for (let i = 0; i < sampleSize; i++) {
+    const r = records[i];
+    if (r && typeof r === 'object') {
+      for (const k of Object.keys(r)) headerSet.add(k);
+    }
+  }
+  const headers = [...headerSet];
+  const rows = records.map((r) => {
+    const out: Record<string, string> = {};
+    for (const h of headers) {
+      const v = (r as Record<string, unknown>)[h];
+      if (v === null || v === undefined) {
+        out[h] = '';
+      } else if (typeof v === 'object' && 'display_value' in v) {
+        // ServiceNow's REST API returns objects of shape
+        // { display_value: "Open", value: "1", link: "…" } when the
+        // request asked for display values. Flatten to the human-
+        // readable display_value, falling back to value.
+        const sn = v as { display_value?: unknown; value?: unknown };
+        out[h] = String(sn.display_value ?? sn.value ?? '');
+      } else if (Array.isArray(v) || typeof v === 'object') {
+        out[h] = JSON.stringify(v);
+      } else {
+        out[h] = String(v);
+      }
+    }
+    return out;
+  });
+  return { headers, rows };
+}
+
+/**
+ * Format-agnostic dispatch — picks the right parser based on file
+ * extension (with a MIME-type fallback). Power Automate setups often
+ * deposit .xlsx because Excel auto-converts attachments; manual
+ * downloads occasionally end up as .json from ServiceNow's REST UI;
+ * scheduled exports stay .csv. The dashboard handles all three.
+ */
+export async function parseWorkOrderFile(
+  file: File,
+): Promise<{ headers: string[]; rows: Record<string, string>[] }> {
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+    return parseXlsxFile(file);
+  }
+  if (name.endsWith('.json')) {
+    return parseJsonFile(file);
+  }
+  if (name.endsWith('.csv')) {
+    return parseCsvFile(file);
+  }
+  // Fall back to MIME type sniffing for files dropped without a
+  // useful extension (rare, but Outlook sometimes mangles filenames).
+  if (file.type.includes('json')) return parseJsonFile(file);
+  if (file.type.includes('spreadsheet') || file.type.includes('excel')) {
+    return parseXlsxFile(file);
+  }
+  // Default to CSV — papaparse will surface a useful error if the
+  // content is genuinely something else.
+  return parseCsvFile(file);
+}
+
+/** File types we'll accept on the Reports page. Used by both the
+ *  manual file picker (`accept="…"`) and the folder-scan helper. */
+export const SUPPORTED_REPORT_EXTENSIONS = ['.csv', '.xlsx', '.xls', '.json'] as const;
+
 export function applyColumnMap(
   rows: Record<string, string>[],
   map: ColumnMap,

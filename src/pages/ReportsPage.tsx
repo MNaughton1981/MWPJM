@@ -4,7 +4,7 @@ import { useStore } from '../state/store';
 import {
   applyColumnMap,
   autoDetectColumns,
-  parseCsvFile,
+  parseWorkOrderFile,
   type ColumnMap,
 } from '../lib/workOrderCsv';
 import {
@@ -12,7 +12,7 @@ import {
   getStoredFolderName,
   isFolderApiSupported,
   pickReportFolder,
-  readLatestCsv,
+  readLatestReport,
 } from '../lib/folderConnection';
 import { formatDateTime } from '../lib/format';
 
@@ -56,9 +56,9 @@ export default function ReportsPage() {
     setError(null);
     setInfo(null);
     try {
-      const { headers, rows } = await parseCsvFile(file);
+      const { headers, rows } = await parseWorkOrderFile(file);
       if (headers.length === 0) {
-        setError('CSV has no header row.');
+        setError('File has no header row (or first row was empty).');
         return;
       }
       const map = autoDetectColumns(headers);
@@ -72,7 +72,7 @@ export default function ReportsPage() {
       });
       setInfo(`Imported ${mapped.length} row(s) from ${file.name}.`);
     } catch (e) {
-      setError(`Failed to parse CSV: ${(e as Error).message}`);
+      setError(`Failed to parse file: ${(e as Error).message}`);
     }
   }
 
@@ -81,9 +81,11 @@ export default function ReportsPage() {
     setInfo(null);
     setRefreshing(true);
     try {
-      const result = await readLatestCsv();
+      const result = await readLatestReport();
       if (!result) {
-        setError('No .csv files found in the connected folder.');
+        setError(
+          'No .csv / .xlsx / .json files found in the connected folder.',
+        );
         return;
       }
       await handleFile(result.file);
@@ -142,7 +144,8 @@ export default function ReportsPage() {
         <div>
           <h1 className="text-xl font-semibold">Reports</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Pull open work orders from your Nuvolo CSV exports.
+            Pull open work orders from Nuvolo — CSV, Excel, or JSON exports
+            all work.
           </p>
         </div>
         {workOrders && (
@@ -179,7 +182,7 @@ export default function ReportsPage() {
           <div className="text-xs text-slate-600 bg-amber-50 border border-amber-200 rounded p-2">
             <strong>Folder access not supported on this browser.</strong> On
             iPhone Safari you'll always pick the file manually from the OneDrive
-            app. Use the file picker below.
+            app. Use the file picker below — CSV, Excel, and JSON all work.
           </div>
         ) : connectedFolder ? (
           <div className="flex flex-wrap items-center gap-2">
@@ -207,7 +210,7 @@ export default function ReportsPage() {
 
       {/* === Section 2: import === */}
       <section className="card p-4 space-y-3">
-        <h2 className="font-semibold">Load latest CSV</h2>
+        <h2 className="font-semibold">Load latest report</h2>
         <div className="flex flex-wrap gap-2">
           {folderApi && connectedFolder && (
             <button
@@ -222,7 +225,7 @@ export default function ReportsPage() {
             className="btn-secondary"
             onClick={() => fileRef.current?.click()}
           >
-            Pick CSV file…
+            Pick file…
           </button>
           {workOrders && (
             <button
@@ -238,7 +241,7 @@ export default function ReportsPage() {
           <input
             ref={fileRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.xlsx,.xls,.json,text/csv,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0];
@@ -248,9 +251,12 @@ export default function ReportsPage() {
           />
         </div>
         <p className="text-xs text-slate-500">
-          Refresh picks the most recently modified <code>.csv</code> in the
-          connected folder. Filename doesn't matter — Nuvolo can name it
-          however it wants.
+          Accepts <code>.csv</code>, <code>.xlsx</code>, and <code>.json</code>.
+          Refresh picks the most recently modified one in the connected folder.
+          Filename doesn't matter — Nuvolo can name it however it wants. Helpful
+          when Excel hijacks a CSV download and saves it as <code>.xlsx</code>,
+          or when a Power Automate flow drops Excel attachments straight into
+          the folder.
         </p>
       </section>
 
@@ -288,8 +294,8 @@ export default function ReportsPage() {
           <div>
             <h2 className="font-semibold">Column mapping</h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Auto-detected from your CSV headers. Override here if anything's
-              off — the dashboard will reflect changes immediately.
+              Auto-detected from the file's column headers. Override here if
+              anything's off — the dashboard will reflect changes immediately.
             </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -315,24 +321,57 @@ export default function ReportsPage() {
       )}
 
       {/* === Section 5: how-to === */}
-      <section className="card p-4 text-xs text-slate-600 space-y-2">
+      <section className="card p-4 text-xs text-slate-600 space-y-3">
         <h2 className="font-semibold text-sm text-slate-800">
           How to refresh from Nuvolo
         </h2>
-        <ol className="list-decimal pl-5 space-y-1">
-          <li>In Nuvolo, open your "Open Work Orders" list view.</li>
-          <li>
-            Right-click any column header → <em>Export → CSV</em>.
-          </li>
-          <li>
-            Save (or schedule the report to save) into your{' '}
-            <code>open_work_orders</code> folder in OneDrive.
-          </li>
-          <li>
-            Come back here and click <strong>↻ Refresh from folder</strong>.
-            The newest <code>.csv</code> wins.
-          </li>
-        </ol>
+        <div>
+          <p className="font-medium text-slate-700">Manual export (today)</p>
+          <ol className="list-decimal pl-5 space-y-1 mt-1">
+            <li>In Nuvolo, open your "Open Work Orders" list view.</li>
+            <li>
+              Right-click any column header → <em>Export → CSV</em> (or
+              JSON / Excel — all three work here).
+            </li>
+            <li>
+              Save (or schedule the report to save) into your{' '}
+              <code>open_work_orders</code> folder in OneDrive.
+            </li>
+            <li>
+              Come back here and click <strong>↻ Refresh from folder</strong>.
+              The newest <code>.csv</code> / <code>.xlsx</code> /{' '}
+              <code>.json</code> wins.
+            </li>
+          </ol>
+          <p className="mt-2 text-slate-500">
+            Heads up: if you double-click the downloaded file before saving,
+            Excel may grab it and save as <code>.xlsx</code>. That's fine —
+            the dashboard reads Excel files too.
+          </p>
+        </div>
+        <div className="border-t pt-2">
+          <p className="font-medium text-slate-700">
+            Auto-route via Power Automate (zero-touch)
+          </p>
+          <ol className="list-decimal pl-5 space-y-1 mt-1">
+            <li>
+              In Nuvolo, schedule the report to email you on a cadence (e.g.
+              hourly during work hours).
+            </li>
+            <li>
+              In Power Automate, create a flow: trigger{' '}
+              <em>"When a new email arrives (V3)"</em> filtered to that
+              report's subject line, action{' '}
+              <em>"Create file (OneDrive)"</em> targeting your{' '}
+              <code>open_work_orders</code> folder.
+            </li>
+            <li>
+              The Excel attachment lands as <code>.xlsx</code> in the folder
+              automatically; OneDrive syncs it to your laptop and phone; the
+              next <strong>↻ Refresh</strong> picks it up.
+            </li>
+          </ol>
+        </div>
         <p className="pt-1">
           Since OneDrive syncs to your phone automatically, you can refresh
           from the same connected folder on the Pixel too.

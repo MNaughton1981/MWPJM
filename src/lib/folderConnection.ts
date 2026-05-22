@@ -121,18 +121,24 @@ async function ensurePermission(
   return false;
 }
 
-export interface LatestCsvResult {
+export interface LatestReportResult {
   file: File;
   filename: string;
   lastModified: number;
-  totalCsvCount: number;
+  totalCount: number;
+  /** The detected file extension (e.g. '.csv', '.xlsx'). Useful for
+   *  status messages so the user knows which format was picked up. */
+  extension: string;
 }
 
 /**
- * Find and read the most recently modified .csv file in the connected
- * folder. Returns null if the folder has no .csv files.
+ * Find and read the most recently modified work order export in the
+ * connected folder. Scans for `.csv`, `.xlsx`, `.xls`, and `.json` so
+ * the same folder works whether your Power Automate flow drops Excel
+ * attachments or you export ServiceNow JSON manually. Returns null if
+ * the folder has none of those.
  */
-export async function readLatestCsv(): Promise<LatestCsvResult | null> {
+export async function readLatestReport(): Promise<LatestReportResult | null> {
   const handle = await idbGet<FileSystemDirectoryHandle>(KEY);
   if (!handle) {
     throw new Error('No folder connected. Connect a folder first.');
@@ -142,19 +148,32 @@ export async function readLatestCsv(): Promise<LatestCsvResult | null> {
     throw new Error('Permission to read the folder was denied.');
   }
 
-  let best: { file: File; name: string; lastModified: number } | null = null;
-  let csvCount = 0;
+  const supported = ['.csv', '.xlsx', '.xls', '.json'];
+  let best: {
+    file: File;
+    name: string;
+    lastModified: number;
+    extension: string;
+  } | null = null;
+  let totalCount = 0;
   const dir = handle as FileSystemDirectoryHandle & {
     values: () => AsyncIterable<FileSystemHandle>;
   };
   for await (const entry of dir.values()) {
     if (entry.kind !== 'file') continue;
-    if (!entry.name.toLowerCase().endsWith('.csv')) continue;
-    csvCount++;
+    const lower = entry.name.toLowerCase();
+    const matchedExt = supported.find((ext) => lower.endsWith(ext));
+    if (!matchedExt) continue;
+    totalCount++;
     const fileHandle = entry as FileSystemFileHandle;
     const f = await fileHandle.getFile();
     if (!best || f.lastModified > best.lastModified) {
-      best = { file: f, name: entry.name, lastModified: f.lastModified };
+      best = {
+        file: f,
+        name: entry.name,
+        lastModified: f.lastModified,
+        extension: matchedExt,
+      };
     }
   }
 
@@ -163,7 +182,8 @@ export async function readLatestCsv(): Promise<LatestCsvResult | null> {
     file: best.file,
     filename: best.name,
     lastModified: best.lastModified,
-    totalCsvCount: csvCount,
+    totalCount,
+    extension: best.extension,
   };
 }
 
