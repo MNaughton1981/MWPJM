@@ -116,6 +116,30 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
+/**
+ * Read the current clipboard contents. Used by the "Paste" action on
+ * the Compose Note surface so the user can dictate into Google Docs /
+ * iOS Notes (where OS-level dictation is much higher quality than the
+ * Web Speech API ever was) and then drop that text in with one tap.
+ *
+ * Returns null on failure — typically when the user denies the
+ * permission prompt, the page isn't on HTTPS, or the browser doesn't
+ * implement clipboard.readText() (older Safari). Callers should
+ * surface a friendly message and fall back to the textarea's
+ * built-in long-press → Paste path.
+ */
+export async function readFromClipboard(): Promise<string | null> {
+  const clip = (navigator as Navigator & {
+    clipboard?: { readText?: () => Promise<string> };
+  }).clipboard;
+  if (!clip || typeof clip.readText !== 'function') return null;
+  try {
+    return await clip.readText();
+  } catch {
+    return null;
+  }
+}
+
 interface NavigatorMaybeShare {
   share?: (data: { title?: string; text?: string; url?: string }) => Promise<void>;
 }
