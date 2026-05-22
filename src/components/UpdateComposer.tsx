@@ -3,11 +3,6 @@ import type { Project } from '../types';
 import { buildNuvoloMail, isValidWorkOrderId } from '../lib/nuvolo';
 import { useStore } from '../state/store';
 import {
-  createVoiceInput,
-  isVoiceInputSupported,
-  type VoiceController,
-} from '../lib/voiceInput';
-import {
   buildClipboardNote,
   buildIcs,
   buildToDoMail,
@@ -15,6 +10,7 @@ import {
   defaultReminderDate,
   downloadIcs,
   isShareSupported,
+  readFromClipboard,
   shareNote,
 } from '../lib/destinations';
 import { formatStamp } from '../lib/format';
@@ -34,33 +30,32 @@ type Toast = { kind: 'ok' | 'err'; text: string } | null;
  *   - System share sheet (mobile only — pick OneNote / Teams / etc.)
  *   - Local activity log only
  *
- * Voice input via the Web Speech API is wired in for hands-free dictation.
+ * Dictation note: we used to ship a 🎙️ Dictate button backed by the
+ * Web Speech API. It produced an echo / duplicate-token bug on Pixel
+ * Chrome that we couldn't fix from outside the engine. The OS-level
+ * dictation in Gboard (Android) and the iOS keyboard is dramatically
+ * better quality and writes directly into the textarea without any
+ * code on our side, so we removed the in-app button and rely on the
+ * keyboard mic instead. The 📋 Paste button below covers the
+ * "dictate into Google Docs / Notes, then paste here" workflow.
  */
 export default function UpdateComposer({ project }: Props) {
   const settings = useStore((s) => s.settings);
   const addActivity = useStore((s) => s.addActivity);
 
   const [text, setText] = useState('');
-  const [interim, setInterim] = useState('');
-  const [recording, setRecording] = useState(false);
   const [showReminder, setShowReminder] = useState(false);
   const [reminderAt, setReminderAt] = useState<string>(() =>
     isoLocalInput(defaultReminderDate()),
   );
   const [toast, setToast] = useState<Toast>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const voiceRef = useRef<VoiceController | null>(null);
-  const voiceOk = isVoiceInputSupported();
   const shareOk = isShareSupported();
   const woValid = isValidWorkOrderId(project.workOrderId);
-
-  // Cleanup voice on unmount
-  useEffect(() => {
-    return () => {
-      voiceRef.current?.destroy();
-      voiceRef.current = null;
-    };
-  }, []);
+  // Show the dictate affordance only on touch devices (mobile/tablet)
+  // where the OS keyboard mic is the intended input path.
+  const isMobile = typeof window !== 'undefined' && 'ontouchstart' in window;
 
   // Auto-clear toasts after a few seconds.
   useEffect(() => {
@@ -68,47 +63,6 @@ export default function UpdateComposer({ project }: Props) {
     const t = window.setTimeout(() => setToast(null), 3500);
     return () => window.clearTimeout(t);
   }, [toast]);
-
-  function startVoice() {
-    if (!voiceOk) return;
-    const ctrl = createVoiceInput({
-      onAppendFinal: (chunk) => {
-        setText((prev) => {
-          const sep = prev && !prev.endsWith(' ') && !prev.endsWith('\n') ? ' ' : '';
-          return prev + sep + chunk;
-        });
-        setInterim('');
-      },
-      onInterim: (chunk) => setInterim(chunk),
-      onError: (err) => {
-        setRecording(false);
-        setInterim('');
-        setToast({
-          kind: 'err',
-          text: voiceErrorMessage(err),
-        });
-      },
-      onEnd: () => {
-        setRecording(false);
-        setInterim('');
-      },
-    });
-    if (!ctrl) {
-      setToast({ kind: 'err', text: 'Voice input not available in this browser.' });
-      return;
-    }
-    voiceRef.current = ctrl;
-    try {
-      ctrl.start();
-      setRecording(true);
-    } catch (e) {
-      setToast({ kind: 'err', text: (e as Error).message });
-    }
-  }
-
-  function stopVoice() {
-    voiceRef.current?.stop();
-  }
 
   // Helper used by every destination button
   function logActivity(opts: { postedToNuvolo: boolean }) {
@@ -174,6 +128,27 @@ export default function UpdateComposer({ project }: Props) {
     } else {
       setToast({ kind: 'err', text: 'Copy failed (clipboard not available).' });
     }
+  }
+
+  async function pasteFromClipboard() {
+    const clip = await readFromClipboard();
+    if (clip === null) {
+      setToast({
+        kind: 'err',
+        text: "Couldn't read clipboard — long-press the textarea and pick Paste instead.",
+      });
+      return;
+    }
+    if (!clip.trim()) {
+      setToast({ kind: 'err', text: 'Clipboard is empty.' });
+      return;
+    }
+    setText((prev) => {
+      if (!prev) return clip;
+      const sep = prev.endsWith('\n') ? '' : '\n';
+      return `${prev}${sep}${clip}`;
+    });
+    setToast({ kind: 'ok', text: `Pasted ${clip.length} characters.` });
   }
 
   async function share() {
@@ -248,49 +223,57 @@ export default function UpdateComposer({ project }: Props) {
         <span className="text-xs text-slate-500">{formatStamp()}</span>
       </div>
 
-      {/* Mic + textarea */}
-      <div className="space-y-2">
-        {voiceOk && (
-          <div className="flex items-center gap-2">
-            {recording ? (
-              <button
-                className="btn-danger text-sm"
-                onClick={stopVoice}
-                title="Stop dictation"
-              >
-                ⏹ Stop ({recording ? 'listening…' : ''})
-              </button>
-            ) : (
-              <button
-                className="btn-secondary text-sm"
-                onClick={startVoice}
-                title="Start voice dictation (uses browser speech recognition)"
-              >
-                🎙️ Dictate
-              </button>
-            )}
-            {recording && (
-              <span className="text-xs text-rose-600 animate-pulse">
-                ● Recording — speak naturally; click Stop when done.
-              </span>
-            )}
-          </div>
+      <div className="space-y-1.5">
+        {/* On mobile, show a prominent Dictate button that focuses the
+            textarea (triggering the keyboard to appear with its mic
+            button). The OS-level dictation in Gboard / iOS is the
+            actual engine — dramatically better than the Web Speech API
+            ever was, and zero code to maintain on our side. Hidden on
+            desktop where users just type. */}
+        {isMobile && (
+          <button
+            type="button"
+            className="btn-secondary text-sm w-full"
+            onClick={() => {
+              textareaRef.current?.focus();
+              setToast({
+                kind: 'ok',
+                text: 'Keyboard open — tap the 🎙️ mic button on your keyboard to dictate.',
+              });
+            }}
+            title="Focus the text field and open the keyboard so you can tap the mic button to dictate"
+          >
+            🎙️ Tap to dictate
+          </button>
         )}
         <textarea
+          ref={textareaRef}
           className="input min-h-[110px]"
           placeholder={
-            voiceOk
-              ? "Type or click 🎙️ Dictate… e.g. 'Plumber on site, rough-in done. Need to order trim kit by Friday.'"
+            isMobile
+              ? "Tap 🎙️ above or the mic on your keyboard to dictate, or type here…"
               : "What happened today? (e.g. Plumber on site, rough-in complete, awaiting electrical inspection.)"
           }
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
-        {recording && interim && (
-          <p className="text-xs italic text-slate-500 pl-1">
-            …{interim}
+        {/* The paste action covers the "dictate into Google Docs / Notes,
+            then drop it in here" workflow. */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <p className="text-[11px] text-slate-500">
+            {isMobile
+              ? 'Or dictate into Google Docs / Notes and paste here.'
+              : 'Tip: dictate into Google Docs / Notes on your phone, sync, and paste here.'}
           </p>
-        )}
+          <button
+            type="button"
+            className="btn-ghost text-xs"
+            onClick={pasteFromClipboard}
+            title="Paste from clipboard — handy when you've just dictated into Google Docs or Notes"
+          >
+            📋 Paste
+          </button>
+        </div>
       </div>
 
       {/* Nuvolo email preview, when applicable */}
@@ -425,20 +408,4 @@ export default function UpdateComposer({ project }: Props) {
 function isoLocalInput(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function voiceErrorMessage(err: string): string {
-  switch (err) {
-    case 'not-allowed':
-    case 'service-not-allowed':
-      return 'Microphone permission was denied. Allow it in browser settings to use voice input.';
-    case 'no-speech':
-      return 'Didn\'t hear anything — try again, speaking a bit louder.';
-    case 'network':
-      return 'Network error talking to the speech service. Check your connection.';
-    case 'audio-capture':
-      return 'No microphone found.';
-    default:
-      return `Voice input error: ${err}`;
-  }
 }
