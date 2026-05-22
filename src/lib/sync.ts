@@ -92,6 +92,11 @@ export function parseSyncPayload(text: string): SyncPayload {
  * On success: updates `lastSyncedAt` and clears `syncError` in the store.
  * On failure: records the error in `syncError` and re-throws so callers
  * (the auto-sync subscriber, or a manual "Push now" click) can react.
+ *
+ * This is the desktop / Chromium path that uses the File System Access
+ * API. Mobile and other environments without that API should call
+ * `pushViaShareOrDownload` instead, which routes through the system
+ * share sheet (preferred) or a download anchor (fallback).
  */
 export async function pushNow(
   filename: string = DEFAULT_SYNC_FILENAME,
@@ -109,6 +114,93 @@ export async function pushNow(
     useStore.setState({ syncError: (e as Error).message });
     throw e;
   }
+}
+
+/**
+ * Whether `navigator.share` accepts files. Used by the sync UI to
+ * decide which Push variant to surface — folder-write (desktop with
+ * a connected folder) or share-sheet (mobile, where the user picks
+ * the OneDrive app from the system share sheet and saves into their
+ * sync folder there).
+ */
+export function isShareFileSupported(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const nav = navigator as Navigator & {
+    canShare?: (data: { files?: File[] }) => boolean;
+    share?: (data: unknown) => Promise<void>;
+  };
+  return typeof nav.share === 'function' && typeof nav.canShare === 'function';
+}
+
+/**
+ * Mobile / non-folder push path. Builds the same SyncPayload as
+ * `pushNow`, then ships it via:
+ *
+ *   1. `navigator.share({ files: [...] })` — preferred on mobile. The
+ *      OS share sheet opens, the user picks OneDrive (or any other
+ *      destination), and the file lands there. Returns method:'share'.
+ *   2. Anchor-tag download — universal fallback. The browser saves
+ *      the file to the user's downloads folder; they must manually
+ *      move it into their OneDrive sync folder afterward. Returns
+ *      method:'download'.
+ *   3. method:'aborted' if the user dismissed the share sheet — in
+ *      that case lastSyncedAt is NOT touched.
+ *
+ * Closes the gap that the original `pushNow` left open: mobile Chrome
+ * has no File System Access API, so without this, mobile work could
+ * never reach the desktop through sync. Pull works either direction;
+ * push needed a separate path on mobile.
+ */
+export async function pushViaShareOrDownload(
+  filename: string = DEFAULT_SYNC_FILENAME,
+): Promise<{ method: 'share' | 'download' | 'aborted'; payload?: SyncPayload }> {
+  const payload = buildPayload();
+  const json = JSON.stringify(payload, null, 2);
+  const file = new File([json], filename, { type: 'application/json' });
+
+  const nav = navigator as Navigator & {
+    canShare?: (data: { files?: File[] }) => boolean;
+    share?: (data: { files?: File[]; title?: string; text?: string }) => Promise<void>;
+  };
+
+  if (nav.share && nav.canShare && nav.canShare({ files: [file] })) {
+    try {
+      await nav.share({
+        files: [file],
+        title: 'MWPJM sync state',
+        text: 'Save this file into your MWPJM sync folder in OneDrive.',
+      });
+      useStore.setState({
+        lastSyncedAt: payload.syncedAt,
+        syncError: null,
+      });
+      return { method: 'share', payload };
+    } catch (e) {
+      if ((e as { name?: string }).name === 'AbortError') {
+        return { method: 'aborted' };
+      }
+      // Fall through to download for any other error rather than
+      // failing outright — the user can still recover by moving the
+      // download into OneDrive manually.
+    }
+  }
+
+  // Download fallback — works in every browser that can drop a Blob
+  // through an anchor click (i.e. every browser).
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+  useStore.setState({
+    lastSyncedAt: payload.syncedAt,
+    syncError: null,
+  });
+  return { method: 'download', payload };
 }
 
 /**

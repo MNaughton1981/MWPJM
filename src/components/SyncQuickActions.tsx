@@ -5,6 +5,7 @@ import {
   pullFromFile,
   pullFromFolder,
   pushNow,
+  pushViaShareOrDownload,
   type SyncPayload,
 } from '../lib/sync';
 import {
@@ -17,16 +18,17 @@ import { formatDateTime } from '../lib/format';
 /**
  * Compact sync controls for header rows (Dashboard, etc).
  *
- * The buttons shown adapt to the device's capabilities:
+ * The Pull button is always shown — it can always do something useful:
+ *   - With a connected folder: reads the folder via File System Access.
+ *   - Otherwise: opens the file picker as a fallback.
  *
- *   - Mobile / Safari (File System Access API absent): only ↓ Pull
- *     is shown, and it opens a file picker so the user can grab the
- *     synced state file from the OneDrive app.
- *   - Desktop, no folder yet connected: same as mobile — ↓ Pull falls
- *     back to the file picker. Push is hidden because it has nowhere
- *     to write.
- *   - Desktop with a connected folder: both ↓ Pull (reads the folder)
- *     and ↑ Push (writes the folder) are shown.
+ * The Push button is also always shown, but the underlying transport
+ * adapts to the device:
+ *   - Connected folder (Chromium desktop): writes via File System Access.
+ *   - Mobile / no folder: routes through navigator.share (system share
+ *     sheet → user picks OneDrive) with a download anchor as fallback.
+ *     This is what makes mobile-to-desktop sync actually work — without
+ *     it, mobile capture was silently stuck on the device.
  *
  * Status messages are shown inline next to the buttons and clear
  * themselves after a few seconds, so the header stays compact and
@@ -113,12 +115,31 @@ export default function SyncQuickActions() {
     setMsg(null);
     setBusy('push');
     try {
-      const payload = await pushNow(filename);
-      setMsg(
-        `Pushed ${payload.projects.length} project(s) at ${formatDateTime(
-          payload.syncedAt,
-        )}.`,
-      );
+      if (canFolderSync) {
+        const payload = await pushNow(filename);
+        setMsg(
+          `Pushed ${payload.projects.length} project(s) at ${formatDateTime(
+            payload.syncedAt,
+          )}.`,
+        );
+      } else {
+        // Mobile (or desktop without a connected folder) — route through
+        // the system share sheet so the user can drop the file into the
+        // OneDrive app, falling back to a download if share-with-files
+        // isn't available.
+        const result = await pushViaShareOrDownload(filename);
+        if (result.method === 'aborted') {
+          setMsg('Share cancelled.');
+        } else if (result.method === 'share') {
+          setMsg(
+            `Shared ${result.payload!.projects.length} project(s). Pick OneDrive → save into your sync folder (overwrite if asked).`,
+          );
+        } else {
+          setMsg(
+            `Downloaded ${result.payload!.projects.length} project(s). Move "${filename}" into your OneDrive sync folder.`,
+          );
+        }
+      }
     } catch (e) {
       setMsg(`Push failed: ${(e as Error).message}`);
     } finally {
@@ -149,17 +170,19 @@ export default function SyncQuickActions() {
       >
         {busy === 'pull' ? '↓ Pulling…' : '↓ Pull'}
       </button>
-      {canFolderSync && (
-        <button
-          type="button"
-          className="btn-ghost text-xs"
-          onClick={handlePush}
-          disabled={busy !== null}
-          title="Push the current state to the connected folder"
-        >
-          {busy === 'push' ? '↑ Pushing…' : '↑ Push'}
-        </button>
-      )}
+      <button
+        type="button"
+        className="btn-ghost text-xs"
+        onClick={handlePush}
+        disabled={busy !== null}
+        title={
+          canFolderSync
+            ? 'Push the current state to the connected folder'
+            : 'Share or download the current state — pick OneDrive in the share sheet to send it to your sync folder'
+        }
+      >
+        {busy === 'push' ? '↑ Pushing…' : '↑ Push'}
+      </button>
       <input
         ref={fileRef}
         type="file"

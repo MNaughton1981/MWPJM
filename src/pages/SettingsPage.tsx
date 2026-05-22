@@ -18,6 +18,7 @@ import {
   pullFromFile,
   pullFromFolder,
   pushNow,
+  pushViaShareOrDownload,
   type SyncPayload,
 } from '../lib/sync';
 import { formatDateTime } from '../lib/format';
@@ -65,10 +66,30 @@ export default function SettingsPage() {
     setSyncMsg(null);
     setBusy('push');
     try {
-      const payload = await pushNow(settings.syncFilename || DEFAULT_SYNC_FILENAME);
-      setSyncMsg(
-        `Pushed ${payload.projects.length} project(s) to "${settings.syncFilename || DEFAULT_SYNC_FILENAME}".`,
-      );
+      const fname = settings.syncFilename || DEFAULT_SYNC_FILENAME;
+      if (folderApi && connectedFolder) {
+        const payload = await pushNow(fname);
+        setSyncMsg(
+          `Pushed ${payload.projects.length} project(s) to "${fname}".`,
+        );
+      } else {
+        // Mobile / no folder — route through the system share sheet
+        // (or download fallback). This is what makes mobile-to-desktop
+        // sync work end-to-end; mobile Chrome has no File System Access
+        // API so writeFileToFolder isn't an option there.
+        const result = await pushViaShareOrDownload(fname);
+        if (result.method === 'aborted') {
+          setSyncMsg('Share cancelled — sync not updated.');
+        } else if (result.method === 'share') {
+          setSyncMsg(
+            `Shared ${result.payload!.projects.length} project(s). In the share sheet, pick OneDrive and save into your sync folder (overwrite the existing "${fname}").`,
+          );
+        } else {
+          setSyncMsg(
+            `Downloaded "${fname}" with ${result.payload!.projects.length} project(s). Move it into your OneDrive sync folder so the desktop's auto-pickup sees it.`,
+          );
+        }
+      }
     } catch (e) {
       setSyncMsg(`Push failed: ${(e as Error).message}`);
     } finally {
@@ -318,21 +339,33 @@ export default function SettingsPage() {
         <div>
           <h2 className="font-semibold">Sync state via OneDrive</h2>
           <p className="text-xs text-slate-500 mt-1">
-            Auto-write a JSON snapshot of your projects, settings, and last
-            imported work-order CSV to the connected folder. OneDrive
-            replicates it to your other devices, where you can pull the
-            latest with one tap. <strong>Photos stay on the device that
-            took them</strong> — they're too big to ship through this
-            channel; only the captions / filenames travel.
+            A single JSON snapshot of your projects, settings, and last
+            imported work-order CSV moves between devices through the
+            OneDrive folder you've connected. <strong>Photos stay on the
+            device that took them</strong> — they're too big to ship
+            through this channel; only their captions / filenames travel.
+            (Use the photo's <em>Download all renamed</em> action to get
+            JPEGs onto OneDrive when you need them on the laptop.)
           </p>
         </div>
 
         {!folderApi && (
-          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
-            <strong>Auto-sync isn't supported on this browser.</strong> On
-            iPhone Safari and mobile Chrome, use <em>Pull from file…</em> below
-            to import a synced state file you've opened from the OneDrive
-            app.
+          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-2 space-y-1">
+            <p>
+              <strong>Auto-sync isn't supported on this browser.</strong>{' '}
+              You can still sync manually:
+            </p>
+            <ul className="list-disc pl-5">
+              <li>
+                <strong>↑ Push</strong> below opens the system share sheet
+                — pick OneDrive and save into your sync folder (overwrite
+                the existing <code>mwpjm-state.json</code>).
+              </li>
+              <li>
+                <strong>Pull from file…</strong> opens a file picker so
+                you can grab a synced state file from the OneDrive app.
+              </li>
+            </ul>
           </div>
         )}
 
@@ -342,8 +375,8 @@ export default function SettingsPage() {
             <Link to="/reports" className="text-brand-600 hover:underline">
               Reports → Connect folder
             </Link>{' '}
-            first. The sync file lives in that same folder, next to your
-            CSV exports.
+            first for one-tap sync. Without that, ↑ Push falls back to a
+            download you'd manually move into OneDrive.
           </div>
         )}
 
@@ -390,25 +423,31 @@ export default function SettingsPage() {
         <div className="text-xs text-slate-600">{syncStatusLine()}</div>
 
         <div className="flex flex-wrap gap-2">
+          <button
+            className="btn-primary text-sm"
+            onClick={pushSyncNow}
+            disabled={busy !== null}
+            title={
+              folderApi && connectedFolder
+                ? 'Write the current state to the connected folder right now'
+                : 'Share or download the current state. On mobile, pick OneDrive in the share sheet to send it to your sync folder.'
+            }
+          >
+            {busy === 'push'
+              ? 'Pushing…'
+              : folderApi && connectedFolder
+                ? '↑ Push now'
+                : '↑ Push (share / download)'}
+          </button>
           {folderApi && connectedFolder && (
-            <>
-              <button
-                className="btn-primary text-sm"
-                onClick={pushSyncNow}
-                disabled={busy !== null}
-                title="Write the current state to the connected folder right now"
-              >
-                {busy === 'push' ? 'Pushing…' : '↑ Push now'}
-              </button>
-              <button
-                className="btn-secondary text-sm"
-                onClick={pullSyncFromFolder}
-                disabled={busy !== null}
-                title="Read the sync file from the connected folder and apply it"
-              >
-                {busy === 'pull' ? 'Pulling…' : '↓ Pull from folder'}
-              </button>
-            </>
+            <button
+              className="btn-secondary text-sm"
+              onClick={pullSyncFromFolder}
+              disabled={busy !== null}
+              title="Read the sync file from the connected folder and apply it"
+            >
+              {busy === 'pull' ? 'Pulling…' : '↓ Pull from folder'}
+            </button>
           )}
           <button
             className="btn-secondary text-sm"
