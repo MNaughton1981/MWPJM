@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { BUILD_TIME } from '../lib/appUpdate';
 
 const NAV_ITEMS = [
   { to: '/projects', label: 'Projects' },
@@ -44,8 +45,11 @@ export default function Layout() {
         <Outlet />
       </main>
 
-      <footer className="text-center text-xs text-slate-400 py-4 safe-bottom">
-        MWPJM · Local-first · Posts to Nuvolo via your email client
+      <footer className="text-center text-xs text-slate-400 py-4 safe-bottom space-y-1">
+        <div>MWPJM · Local-first · Posts to Nuvolo via your email client</div>
+        <div className="font-mono text-[10px] text-slate-300">
+          Build {BUILD_TIME}
+        </div>
       </footer>
     </div>
   );
