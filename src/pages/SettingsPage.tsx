@@ -6,7 +6,7 @@ import {
   downloadJson,
   parseAppDataFile,
 } from '../lib/exporters';
-import { DEFAULT_NUVOLO_EMAIL } from '../lib/nuvolo';
+import { DEFAULT_NUVOLO_EMAIL, DEFAULT_WO_URL_PATTERN } from '../lib/nuvolo';
 import { BUILD_TIME, forceAppUpdate } from '../lib/appUpdate';
 
 export default function SettingsPage() {
@@ -98,13 +98,40 @@ export default function SettingsPage() {
               setSettings({ nuvoloWorkOrderUrlPattern: e.target.value })
             }
           />
+          <div className="mt-1 flex items-center gap-2">
+            <button
+              type="button"
+              className="text-xs text-brand-600 hover:underline"
+              onClick={() =>
+                setSettings({ nuvoloWorkOrderUrlPattern: DEFAULT_WO_URL_PATTERN })
+              }
+              disabled={
+                settings.nuvoloWorkOrderUrlPattern === DEFAULT_WO_URL_PATTERN
+              }
+              title="Restore the shipped default pattern"
+            >
+              ↺ Reset to default
+            </button>
+          </div>
           <p className="text-xs text-slate-500 mt-1">
-            Determines what happens when you click a FWKD link in the app.
-            <strong> To get the right URL:</strong> open a real WO in Nuvolo on
-            your laptop, copy the URL from the address bar, and paste it here
-            with the FWKD number replaced by <code>{'{wo}'}</code>. On Android,
-            if the Nuvolo mobile app has registered <code>service-now.com</code>{' '}
-            links, tapping a FWKD link will offer to open it in the app.
+            Used for the clickable FWKD links in the app (Project page and
+            Work Orders table). The shipped default points to Nuvolo's{' '}
+            <code>x_nuvo_eam_facilities_work_orders</code> table on{' '}
+            <code>mathworks.service-now.com</code> and looks up the work
+            order by its number — ServiceNow auto-loads the form view when
+            exactly one record matches.
+          </p>
+          <p className="text-xs text-slate-500 mt-1">
+            <strong>If the link doesn't open the right WO,</strong> open one
+            in Nuvolo on your laptop, copy the URL from the address bar, and
+            paste it here with the FWKD number replaced by{' '}
+            <code>{'{wo}'}</code>. Modern Nuvolo URLs that look like{' '}
+            <code>/now/nav/ui/classic/params/target/...?sys_id=...</code> are
+            desktop-UI wrappers — the simpler{' '}
+            <code>/x_nuvo_eam_facilities_work_orders.do?sysparm_query=number=&#123;wo&#125;</code>{' '}
+            form is more mobile-friendly. On Android, if the Nuvolo mobile
+            app has registered <code>service-now.com</code> links, tapping a
+            FWKD link will offer to open it in the app.
           </p>
         </div>
       </section>

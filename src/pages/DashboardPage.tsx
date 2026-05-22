@@ -74,7 +74,7 @@ export default function DashboardPage() {
   if (!workOrders) {
     return (
       <div className="space-y-4">
-        <h1 className="text-xl font-semibold">Open Work Order Dashboard</h1>
+        <h1 className="text-xl font-semibold">Work Orders</h1>
         <div className="card p-8 text-center space-y-3">
           <h2 className="font-semibold">No work order data loaded yet</h2>
           <p className="text-sm text-slate-600 max-w-md mx-auto">
@@ -93,7 +93,7 @@ export default function DashboardPage() {
     <div className="space-y-4">
       <div className="flex items-baseline justify-between flex-wrap gap-2">
         <div>
-          <h1 className="text-xl font-semibold">Open Work Order Dashboard</h1>
+          <h1 className="text-xl font-semibold">Work Orders</h1>
           <p className="text-xs text-slate-500 mt-0.5">
             Source: <span className="font-mono">{workOrders.sourceFilename}</span>{' '}
             · Imported {formatDateTime(workOrders.importedAt)}
@@ -251,9 +251,9 @@ export default function DashboardPage() {
                         className="btn-ghost text-xs"
                         onClick={() => startProjectFromWO(r)}
                         disabled={!r.number}
-                        title="Create a project pre-filled with this work order"
+                        title="Create a quick-view follow-up project in MWPJM, pre-filled with this work order's details"
                       >
-                        Start project →
+                        Open work order →
                       </button>
                     </td>
                   </tr>

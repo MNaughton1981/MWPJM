@@ -2,8 +2,8 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { BUILD_TIME } from '../lib/appUpdate';
 
 const NAV_ITEMS = [
-  { to: '/projects', label: 'Projects' },
-  { to: '/dashboard', label: 'Dashboard' },
+  { to: '/projects', label: 'Dashboard' },
+  { to: '/dashboard', label: 'Work Orders' },
   { to: '/reports', label: 'Reports' },
   { to: '/settings', label: 'Settings' },
 ];

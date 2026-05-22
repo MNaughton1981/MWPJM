@@ -48,13 +48,34 @@ export function isValidWorkOrderId(s: string | undefined): boolean {
 
 /**
  * Sensible default URL pattern for navigating to a ServiceNow / Nuvolo
- * work order by its number. The user can override in Settings if their
- * MathWorks instance uses a different domain or table — the easiest way
- * is to open a real WO in the browser, copy the URL, and paste it here
- * with the FWKD number replaced by `{wo}`.
+ * work order by its number. The MathWorks instance uses Nuvolo's
+ * `x_nuvo_eam_facilities_work_orders` table (verified from a real
+ * desktop URL: `.../x_nuvo_eam_facilities_work_orders.do?sys_id=...`).
+ *
+ * We use the classic `.do?sysparm_query=number=<wo>` form rather than
+ * the modern `now/nav/ui/classic/params/target/...` wrapper because:
+ *   - We don't have the per-WO sys_id, only the FWKD number, and
+ *     ServiceNow auto-redirects the classic form to the matching record
+ *     when exactly one row matches the query.
+ *   - The classic form is friendlier to mobile / deep-link handlers
+ *     (the modern wrapper is a desktop-UI thing).
+ *
+ * The user can override in Settings if their workflow needs the modern
+ * UI specifically.
  */
 export const DEFAULT_WO_URL_PATTERN =
-  'https://mathworks.service-now.com/sow_work_order.do?sysparm_query=number={wo}';
+  'https://mathworks.service-now.com/x_nuvo_eam_facilities_work_orders.do?sysparm_query=number={wo}';
+
+/**
+ * Previously-shipped defaults that should be auto-upgraded to the
+ * current `DEFAULT_WO_URL_PATTERN` on rehydrate. Any user value that
+ * exactly matches one of these is treated as "still on the default"
+ * and migrated; anything else is preserved as a customization.
+ */
+export const LEGACY_WO_URL_PATTERNS: ReadonlyArray<string> = [
+  // Original guess from PR #5 — wrong table name (sow_work_order).
+  'https://mathworks.service-now.com/sow_work_order.do?sysparm_query=number={wo}',
+];
 
 /**
  * Resolve a configured URL pattern into a real link for a given work
