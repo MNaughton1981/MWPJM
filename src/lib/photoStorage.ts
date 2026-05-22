@@ -156,3 +156,35 @@ export function buildFilename(args: FilenameArgs): string {
 }
 
 export const DEFAULT_PHOTO_NAMING_PATTERN = '{date} - {caption}.{ext}';
+
+
+/**
+ * Load all photo blobs for a project, returning them as File objects
+ * suitable for navigator.share({ files: [...] }). Skips any photos
+ * whose blob is missing from IndexedDB (e.g. if the metadata synced
+ * from another device but the binary didn't).
+ *
+ * The filename for each File is built from the photo's caption and
+ * original extension, sanitized for use as an email attachment name.
+ */
+export async function loadProjectPhotoFiles(
+  projectId: string,
+  photos: ReadonlyArray<{ id: string; mimeType: string; originalName: string; caption: string }>,
+): Promise<File[]> {
+  const files: File[] = [];
+  for (const photo of photos) {
+    const blob = await loadPhoto(projectId, photo.id);
+    if (!blob) continue;
+    // Build a human-readable filename from caption + original extension
+    const extMatch = photo.originalName.match(/\.([a-z0-9]+)$/i);
+    const ext = (extMatch?.[1] ?? 'jpg').toLowerCase();
+    const caption = (photo.caption || 'photo')
+      .replace(FILENAME_ILLEGAL, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 50);
+    const filename = `${caption}.${ext}`;
+    files.push(new File([blob], filename, { type: photo.mimeType || `image/${ext}` }));
+  }
+  return files;
+}

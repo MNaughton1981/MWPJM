@@ -13,6 +13,7 @@ import {
   readFromClipboard,
   shareNote,
 } from '../lib/destinations';
+import { loadProjectPhotoFiles } from '../lib/photoStorage';
 import { formatStamp } from '../lib/format';
 
 interface Props {
@@ -88,8 +89,71 @@ export default function UpdateComposer({ project }: Props) {
 
   function postToNuvolo() {
     if (!nuvoloMail) return;
+    postToNuvoloAsync();
+  }
+
+  async function postToNuvoloAsync() {
+    if (!nuvoloMail) return;
+
+    const hasPhotos = (project.photos ?? []).length > 0;
+
+    // On mobile with photos: use navigator.share to attach photos to the
+    // email. The system share sheet opens with photos attached + subject/body
+    // pre-filled. User picks their mail app and hits Send.
+    if (isMobile && hasPhotos) {
+      try {
+        const files = await loadProjectPhotoFiles(project.id, project.photos ?? []);
+        if (files.length > 0) {
+          const nav = navigator as Navigator & {
+            canShare?: (data: { files?: File[] }) => boolean;
+            share?: (data: { files?: File[]; title?: string; text?: string }) => Promise<void>;
+          };
+          if (nav.share && nav.canShare && nav.canShare({ files })) {
+            const shareText =
+              `To: ${nuvoloMail.to}\n` +
+              `Subject: ${nuvoloMail.subject}\n\n` +
+              nuvoloMail.body;
+            await nav.share({
+              files,
+              title: nuvoloMail.subject,
+              text: shareText,
+            });
+            logActivity({ postedToNuvolo: true });
+            setText('');
+            setToast({
+              kind: 'ok',
+              text: `Shared with ${files.length} photo(s) — send from your mail app.`,
+            });
+            return;
+          }
+        }
+      } catch (e) {
+        if ((e as { name?: string }).name === 'AbortError') {
+          // User cancelled share sheet — don't log activity
+          setToast({ kind: 'err', text: 'Share cancelled — not posted.' });
+          return;
+        }
+        // Fall through to mailto: if share fails for any other reason
+      }
+    }
+
+    // Desktop path (or mobile without photos / share not supported):
+    // use mailto: link. If there are photos, mention them in the body.
     logActivity({ postedToNuvolo: true });
-    window.location.href = nuvoloMail.href;
+    if (hasPhotos && !isMobile) {
+      // Append a note about photos to the mailto body so the user remembers
+      // to attach them via the Nuvolo upload UI
+      const photoCount = (project.photos ?? []).length;
+      const photoNote = `\n\n[${photoCount} photo(s) captured in MWPJM — attach via Nuvolo or download from the app]`;
+      const enhancedBody = nuvoloMail.body + photoNote;
+      const href =
+        `mailto:${encodeURIComponent(nuvoloMail.to)}` +
+        `?subject=${encodeURIComponent(nuvoloMail.subject)}` +
+        `&body=${encodeURIComponent(enhancedBody)}`;
+      window.location.href = href;
+    } else {
+      window.location.href = nuvoloMail.href;
+    }
     setText('');
   }
 
@@ -349,10 +413,14 @@ export default function UpdateComposer({ project }: Props) {
                 ? 'Set a valid Work Order ID first'
                 : !hasText
                 ? 'Type your update first'
+                : isMobile && (project.photos ?? []).length > 0
+                ? `Share update + ${(project.photos ?? []).length} photo(s) via mail app`
                 : 'Open mail client and log activity'
             }
           >
-            Post to Nuvolo →
+            {isMobile && (project.photos ?? []).length > 0
+              ? `Post to Nuvolo + ${(project.photos ?? []).length} photo(s) →`
+              : 'Post to Nuvolo →'}
           </button>
         </div>
         <div className="flex flex-wrap gap-2 justify-end">
