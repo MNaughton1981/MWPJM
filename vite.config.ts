@@ -5,6 +5,12 @@ import { VitePWA } from 'vite-plugin-pwa';
 // GitHub Pages deploys at https://<user>.github.io/MWPJM/
 export default defineConfig({
   base: '/MWPJM/',
+  // Surface the build timestamp in the bundle so the Layout footer can
+  // show it. Lets the user verify at a glance whether they're on the
+  // latest deploy or a stale cached one.
+  define: {
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+  },
   plugins: [
     react(),
     VitePWA({

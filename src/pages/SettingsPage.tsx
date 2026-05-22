@@ -7,6 +7,7 @@ import {
   parseAppDataFile,
 } from '../lib/exporters';
 import { DEFAULT_NUVOLO_EMAIL } from '../lib/nuvolo';
+import { BUILD_TIME, forceAppUpdate } from '../lib/appUpdate';
 
 export default function SettingsPage() {
   const settings = useStore((s) => s.settings);
@@ -238,6 +239,30 @@ export default function SettingsPage() {
           Install: in Chrome on your Pixel, tap the menu → "Add to Home screen."
           On iPhone Safari, tap the share button → "Add to Home Screen."
         </p>
+        <div className="border-t pt-3 mt-2 space-y-2">
+          <div className="text-xs text-slate-500">
+            Current build:{' '}
+            <code className="font-mono text-slate-700">{BUILD_TIME}</code>
+          </div>
+          <button
+            className="btn-secondary text-xs"
+            onClick={async () => {
+              const ok = window.confirm(
+                'Force the app to fetch the latest deploy? This will clear cached app code and reload — your projects, photos, and settings stay intact.',
+              );
+              if (!ok) return;
+              await forceAppUpdate();
+            }}
+            title="Unregister the service worker, clear app caches, and reload"
+          >
+            ↻ Force app update
+          </button>
+          <p className="text-[11px] text-slate-500">
+            Use this if you've deployed a new version but still see the old UI.
+            Your projects / photos / settings stay intact (they're stored
+            separately in localStorage and IndexedDB, not in the app cache).
+          </p>
+        </div>
       </section>
     </div>
   );
