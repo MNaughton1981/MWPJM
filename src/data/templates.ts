@@ -57,6 +57,7 @@ export function buildDishwasherUpgradeTemplate(name: string): Project {
       { id: uid(), title: 'Close work order', done: false, trade: 'general' },
     ],
     activity: [],
+    photos: [],
   };
 }
 
@@ -90,6 +91,7 @@ export const TEMPLATES: TemplateInfo[] = [
         trades: [],
         milestones: [],
         activity: [],
+        photos: [],
       };
     },
   },

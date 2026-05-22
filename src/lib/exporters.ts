@@ -105,5 +105,20 @@ export function projectToMarkdown(project: Project): string {
   }
   lines.push('');
 
+  const photos = project.photos ?? [];
+  if (photos.length > 0) {
+    lines.push('## Photos');
+    lines.push(`${photos.length} photo(s) on file in MWPJM:`);
+    for (const ph of photos) {
+      const cap = ph.caption || '_(no caption)_';
+      lines.push(`- ${cap} — ${formatDateTime(ph.capturedAt)}`);
+    }
+    lines.push('');
+    lines.push(
+      '_Photos themselves stay on the device — download from MWPJM to upload to Nuvolo._',
+    );
+    lines.push('');
+  }
+
   return lines.join('\n');
 }

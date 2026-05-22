@@ -94,7 +94,24 @@ export default function SettingsPage() {
       </section>
 
       <section className="card p-4 space-y-3">
-        <h2 className="font-semibold">Sync via OneDrive</h2>
+        <h2 className="font-semibold">Photo naming pattern</h2>
+        <div>
+          <label className="label">Template for downloaded photo filenames</label>
+          <input
+            className="input font-mono text-sm"
+            value={settings.photoNamingPattern}
+            onChange={(e) => setSettings({ photoNamingPattern: e.target.value })}
+          />
+          <p className="text-xs text-slate-500 mt-1">
+            Placeholders: <code>{'{wo}'}</code> <code>{'{project}'}</code>{' '}
+            <code>{'{date}'}</code> <code>{'{caption}'}</code>{' '}
+            <code>{'{seq}'}</code> <code>{'{ext}'}</code>. Default produces
+            something like <code>FWKD123_2026-05-21_001_dishwasher-rough-in.jpg</code>.
+          </p>
+        </div>
+      </section>
+
+      <section className="card p-4 space-y-3">
         <p className="text-sm text-slate-600">
           The app stores everything locally on this device. To share data
           between your laptop and phone, export a backup file into a folder
