@@ -49,9 +49,13 @@ export default function UpdateComposer({ project }: Props) {
     isoLocalInput(defaultReminderDate()),
   );
   const [toast, setToast] = useState<Toast>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const shareOk = isShareSupported();
   const woValid = isValidWorkOrderId(project.workOrderId);
+  // Show the dictate affordance only on touch devices (mobile/tablet)
+  // where the OS keyboard mic is the intended input path.
+  const isMobile = typeof window !== 'undefined' && 'ontouchstart' in window;
 
   // Auto-clear toasts after a few seconds.
   useEffect(() => {
@@ -220,8 +224,46 @@ export default function UpdateComposer({ project }: Props) {
       </div>
 
       <div className="space-y-1.5">
+        {/* On mobile, show a prominent Dictate button that focuses the
+            textarea (triggering the keyboard to appear with its mic
+            button). The OS-level dictation in Gboard / iOS is the
+            actual engine — dramatically better than the Web Speech API
+            ever was, and zero code to maintain on our side. Hidden on
+            desktop where users just type. */}
+        {isMobile && (
+          <button
+            type="button"
+            className="btn-secondary text-sm w-full"
+            onClick={() => {
+              textareaRef.current?.focus();
+              setToast({
+                kind: 'ok',
+                text: 'Keyboard open — tap the 🎙️ mic button on your keyboard to dictate.',
+              });
+            }}
+            title="Focus the text field and open the keyboard so you can tap the mic button to dictate"
+          >
+            🎙️ Tap to dictate
+          </button>
+        )}
         <textarea
+          ref={textareaRef}
           className="input min-h-[110px]"
+          placeholder={
+            isMobile
+              ? "Tap 🎙️ above or the mic on your keyboard to dictate, or type here…"
+              : "What happened today? (e.g. Plumber on site, rough-in complete, awaiting electrical inspection.)"
+          }
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        {/* The paste action covers the "dictate into Google Docs / Notes,
+            then drop it in here" workflow. */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <p className="text-[11px] text-slate-500">
+            {isMobile
+              ? 'Or dictate into Google Docs / Notes and paste here.'
+              : 'Tip: dictate into Google Docs / Notes on your phone, sync, and paste here.'}
           placeholder="What happened today? (e.g. Plumber on site, rough-in complete, awaiting electrical inspection.)"
           value={text}
           onChange={(e) => setText(e.target.value)}
