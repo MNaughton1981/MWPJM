@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useStore } from '../state/store';
 import {
@@ -11,7 +12,12 @@ import ActivityLogSection from '../components/ActivityLogSection';
 import PhotosSection from '../components/PhotosSection';
 import UpdateComposer from '../components/UpdateComposer';
 import VendorsSection from '../components/VendorsSection';
-import { downloadText, projectToMarkdown } from '../lib/exporters';
+import {
+  downloadText,
+  projectToHtml,
+  projectToMarkdown,
+} from '../lib/exporters';
+import { copyRichText } from '../lib/destinations';
 
 export default function ProjectPage() {
   const { id = '' } = useParams();
@@ -21,6 +27,15 @@ export default function ProjectPage() {
   const deleteProject = useStore((s) => s.deleteProject);
   const woUrlPattern = useStore((s) => s.settings.nuvoloWorkOrderUrlPattern);
   const importedWorkOrders = useStore((s) => s.workOrders);
+  const [copyStatus, setCopyStatus] = useState<string | null>(null);
+
+  // Auto-clear the inline "Copied!" feedback after a few seconds so the
+  // header doesn't accumulate stale chrome.
+  useEffect(() => {
+    if (!copyStatus) return;
+    const t = window.setTimeout(() => setCopyStatus(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [copyStatus]);
 
   if (!project) {
     return (
@@ -49,7 +64,26 @@ export default function ProjectPage() {
 
   const isSimple = project.simple ?? false;
 
-  function exportMarkdown() {
+  // Primary OneNote-export path: write rich HTML + plain-text fallback to
+  // the clipboard. User switches to OneNote and hits Ctrl+V — formatted
+  // headings, tables, and lists land directly in the page. No file
+  // shuffling, no code editor opening for a markdown file.
+  async function copyForOneNote() {
+    const html = projectToHtml(project!);
+    const md = projectToMarkdown(project!);
+    const ok = await copyRichText(html, md);
+    setCopyStatus(
+      ok
+        ? 'Copied — switch to OneNote and Ctrl+V to paste.'
+        : 'Copy failed — clipboard not available on this browser.',
+    );
+  }
+
+  // Secondary: keep the .md download for users who want a saved file
+  // (e.g. archiving in OneDrive, importing into a markdown-aware tool).
+  // Tucked behind a smaller button so it's discoverable but not the
+  // primary action.
+  function downloadMarkdown() {
     const md = projectToMarkdown(project!);
     const safeName = project!.name.replace(/[^a-z0-9-_]+/gi, '-').toLowerCase();
     downloadText(`${safeName}-${new Date().toISOString().slice(0, 10)}.md`, md);
@@ -203,8 +237,27 @@ export default function ProjectPage() {
             {isSimple ? '+ Switch to full project' : '− Switch to quick view'}
           </button>
           <span className="grow" />
-          <button className="btn-secondary text-xs" onClick={exportMarkdown}>
-            Export to OneNote (.md)
+          {copyStatus && (
+            <span
+              className="text-[11px] text-slate-600 mr-1 max-w-xs truncate"
+              title={copyStatus}
+            >
+              {copyStatus}
+            </span>
+          )}
+          <button
+            className="btn-secondary text-xs"
+            onClick={copyForOneNote}
+            title="Copy a formatted snapshot to your clipboard. Paste into OneNote, Word, Outlook, or Gmail with headings/tables intact."
+          >
+            📋 Copy for OneNote
+          </button>
+          <button
+            className="btn-ghost text-xs"
+            onClick={downloadMarkdown}
+            title="Download the same content as a Markdown file (for archiving or Markdown-aware tools)"
+          >
+            ↓ .md
           </button>
           <button className="btn-ghost text-xs text-rose-600" onClick={confirmDelete}>
             Delete project

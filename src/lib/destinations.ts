@@ -117,6 +117,55 @@ export async function copyToClipboard(text: string): Promise<boolean> {
 }
 
 /**
+ * Write rich text to the clipboard with both HTML and plain-text
+ * variants. When the user pastes:
+ *
+ *   - Into OneNote / Word / Outlook compose / Gmail → the HTML view
+ *     is used, so headings, tables, and lists render with formatting.
+ *   - Into Notepad / a code editor / a Markdown app → the plain-text
+ *     fallback is used.
+ *
+ * Falls back to plain-text-only if the browser doesn't expose
+ * ClipboardItem (older Safari, Firefox), so the action always does
+ * something useful even if the formatting is lost.
+ */
+export async function copyRichText(
+  html: string,
+  plainText: string,
+): Promise<boolean> {
+  const win = window as unknown as {
+    ClipboardItem?: new (items: Record<string, Blob>) => unknown;
+  };
+  try {
+    if (
+      typeof win.ClipboardItem === 'function' &&
+      navigator.clipboard &&
+      'write' in navigator.clipboard
+    ) {
+      const item = new win.ClipboardItem({
+        'text/html': new Blob([html], { type: 'text/html' }),
+        'text/plain': new Blob([plainText], { type: 'text/plain' }),
+      });
+      // navigator.clipboard.write expects an array of ClipboardItem;
+      // the type isn't standardized across libs so we cast.
+      await (navigator.clipboard as unknown as {
+        write: (items: unknown[]) => Promise<void>;
+      }).write([item]);
+      return true;
+    }
+  } catch {
+    // Fall through to plain-text fallback
+  }
+  // Plain-text fallback
+  try {
+    await navigator.clipboard.writeText(plainText);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Read the current clipboard contents. Used by the "Paste" action on
  * the Compose Note surface so the user can dictate into Google Docs /
  * iOS Notes (where OS-level dictation is much higher quality than the
