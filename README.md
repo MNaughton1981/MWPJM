@@ -47,8 +47,10 @@ the FWKD ID is in the subject and posts the body as a work order note.
   email never gets sent.
 - **Templates** — seeded "Kitchenette Dishwasher Upgrade (18" + 24")"
   template with the standard task list.
-- **Export to OneNote** — generates a Markdown summary you can paste into
-  OneNote for the long-term record.
+- **Export Summary** — copies a formatted snapshot of the project to your
+  clipboard. Paste into OneNote, Word, Outlook, Gmail, Teams, or any
+  rich-text surface for the long-term record. A `.md` download is also
+  available for archiving / Markdown-aware tools.
 
 ## Local development
 

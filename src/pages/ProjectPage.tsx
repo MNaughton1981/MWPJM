@@ -64,17 +64,18 @@ export default function ProjectPage() {
 
   const isSimple = project.simple ?? false;
 
-  // Primary OneNote-export path: write rich HTML + plain-text fallback to
-  // the clipboard. User switches to OneNote and hits Ctrl+V — formatted
-  // headings, tables, and lists land directly in the page. No file
-  // shuffling, no code editor opening for a markdown file.
-  async function copyForOneNote() {
+  // Primary export path: write rich HTML + plain-text fallback to the
+  // clipboard. User switches to their notes app of choice (OneNote,
+  // Word, Outlook compose, Gmail compose, Teams, etc.) and hits Ctrl+V
+  // — formatted headings, tables, and lists land directly in the page.
+  // No file shuffling, no code editor opening for a markdown file.
+  async function exportSummary() {
     const html = projectToHtml(project!);
     const md = projectToMarkdown(project!);
     const ok = await copyRichText(html, md);
     setCopyStatus(
       ok
-        ? 'Copied — switch to OneNote and Ctrl+V to paste.'
+        ? 'Copied — paste (Ctrl+V) into your notes app.'
         : 'Copy failed — clipboard not available on this browser.',
     );
   }
@@ -247,10 +248,10 @@ export default function ProjectPage() {
           )}
           <button
             className="btn-secondary text-xs"
-            onClick={copyForOneNote}
-            title="Copy a formatted snapshot to your clipboard. Paste into OneNote, Word, Outlook, or Gmail with headings/tables intact."
+            onClick={exportSummary}
+            title="Copy a formatted snapshot to your clipboard. Paste into OneNote, Word, Outlook, Gmail, Teams, or any rich-text surface — headings and tables stay intact."
           >
-            📋 Copy for OneNote
+            📋 Export Summary
           </button>
           <button
             className="btn-ghost text-xs"
