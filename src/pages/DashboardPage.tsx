@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../state/store';
 import { TEMPLATES } from '../data/templates';
@@ -22,6 +22,28 @@ export default function DashboardPage() {
   const [filter, setFilter] = useState('');
   const [stateFilter, setStateFilter] = useState<string>('');
   const [priorityFilter, setPriorityFilter] = useState<string>('');
+  // Boolean filter — separate from the column filters because "overdue"
+  // is computed (isOverdue(dueDate)) rather than a single column value.
+  const [onlyOverdue, setOnlyOverdue] = useState(false);
+
+  const anyFilter =
+    !!filter || !!stateFilter || !!priorityFilter || onlyOverdue;
+
+  function clearAllFilters() {
+    setFilter('');
+    setStateFilter('');
+    setPriorityFilter('');
+    setOnlyOverdue(false);
+  }
+
+  // Toggle helpers so clicking the same chip a second time clears the
+  // filter (idiomatic for chip-style filters).
+  function toggleStateFilter(s: string) {
+    setStateFilter((cur) => (cur === s ? '' : s));
+  }
+  function togglePriorityFilter(p: string) {
+    setPriorityFilter((cur) => (cur === p ? '' : p));
+  }
 
   function startProjectFromWO(wo: WorkOrder) {
     // Default to the lightweight Work Order Follow-up template — quick
@@ -45,6 +67,7 @@ export default function DashboardPage() {
     return workOrders.rows.filter((r) => {
       if (stateFilter && r.state !== stateFilter) return false;
       if (priorityFilter && r.priority !== priorityFilter) return false;
+      if (onlyOverdue && !isOverdue(r.dueDate)) return false;
       if (!q) return true;
       const hay = [
         r.number,
@@ -58,7 +81,7 @@ export default function DashboardPage() {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [workOrders, filter, stateFilter, priorityFilter]);
+  }, [workOrders, filter, stateFilter, priorityFilter, onlyOverdue]);
 
   const stats = useMemo(() => {
     if (!workOrders) return null;
@@ -106,27 +129,65 @@ export default function DashboardPage() {
 
       {stats && (
         <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatTile label="Total open" value={stats.total} />
+          <StatTile
+            label="Total open"
+            value={stats.total}
+            onClick={anyFilter ? clearAllFilters : undefined}
+            title={
+              anyFilter
+                ? 'Clear all active filters and show every row'
+                : 'No filters active'
+            }
+          />
           <StatTile
             label="Overdue"
             value={stats.overdue}
             tone={stats.overdue > 0 ? 'rose' : 'slate'}
+            active={onlyOverdue}
+            onClick={
+              stats.overdue > 0
+                ? () => setOnlyOverdue((v) => !v)
+                : undefined
+            }
+            title={
+              stats.overdue === 0
+                ? 'Nothing overdue'
+                : onlyOverdue
+                  ? 'Showing only overdue rows — click to show all'
+                  : 'Show only overdue rows'
+            }
           />
           <StatTile
             label="States"
             value={stats.byState.size}
-            detail={[...stats.byState.entries()]
-              .slice(0, 3)
-              .map(([k, v]) => `${k}: ${v}`)
-              .join(' · ')}
+            detailChips={[...stats.byState.entries()].slice(0, 3).map(
+              ([k, v]) => ({
+                key: k,
+                label: `${k}: ${v}`,
+                active: stateFilter === k,
+                onClick: () => toggleStateFilter(k),
+                title:
+                  stateFilter === k
+                    ? `Showing only "${k}" — click to clear`
+                    : `Filter to "${k}"`,
+              }),
+            )}
           />
           <StatTile
             label="Priorities"
             value={stats.byPriority.size}
-            detail={[...stats.byPriority.entries()]
-              .slice(0, 3)
-              .map(([k, v]) => `${k}: ${v}`)
-              .join(' · ')}
+            detailChips={[...stats.byPriority.entries()].slice(0, 3).map(
+              ([k, v]) => ({
+                key: k,
+                label: `${k}: ${v}`,
+                active: priorityFilter === k,
+                onClick: () => togglePriorityFilter(k),
+                title:
+                  priorityFilter === k
+                    ? `Showing only "${k}" — click to clear`
+                    : `Filter to "${k}"`,
+              }),
+            )}
           />
         </section>
       )}
@@ -171,14 +232,15 @@ export default function DashboardPage() {
 
         <div className="text-xs text-slate-500">
           Showing {filtered.length} of {workOrders.rows.length}
-          {(stateFilter || priorityFilter || filter) && (
+          {onlyOverdue && (
+            <span className="ml-2 pill bg-rose-100 text-rose-700">
+              overdue only
+            </span>
+          )}
+          {anyFilter && (
             <button
               className="ml-2 text-brand-600 hover:underline"
-              onClick={() => {
-                setFilter('');
-                setStateFilter('');
-                setPriorityFilter('');
-              }}
+              onClick={clearAllFilters}
             >
               Clear filters
             </button>
@@ -275,21 +337,47 @@ export default function DashboardPage() {
   );
 }
 
+interface StatTileChip {
+  key: string;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  title?: string;
+}
+
 function StatTile({
   label,
   value,
   detail,
+  detailChips,
   tone = 'slate',
+  onClick,
+  active,
+  title,
 }: {
   label: string;
   value: number;
   detail?: string;
+  detailChips?: StatTileChip[];
   tone?: 'slate' | 'rose';
+  onClick?: () => void;
+  active?: boolean;
+  title?: string;
 }) {
-  const ring =
+  const baseRing =
     tone === 'rose' ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-white';
-  return (
-    <div className={`rounded-xl border ${ring} p-3`}>
+  // When the tile is the *active* filter source, give it a stronger
+  // ring so the user sees what's currently constraining the view.
+  const activeRing =
+    tone === 'rose'
+      ? 'border-rose-500 ring-2 ring-rose-300 bg-rose-50'
+      : 'border-brand-500 ring-2 ring-brand-200 bg-brand-50';
+  const ring = active ? activeRing : baseRing;
+
+  // Common inner content used in both the static and clickable variants
+  // so we don't duplicate markup.
+  const inner: ReactNode = (
+    <>
       <div className="text-xs text-slate-500">{label}</div>
       <div className="text-2xl font-semibold mt-0.5">{value}</div>
       {detail && (
@@ -297,6 +385,54 @@ function StatTile({
           {detail}
         </div>
       )}
+      {detailChips && detailChips.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {detailChips.map((c) => (
+            <button
+              key={c.key}
+              type="button"
+              onClick={(e) => {
+                // Don't bubble to the parent tile (if any) — chip click
+                // should set the column filter without also tripping a
+                // tile-level onClick.
+                e.stopPropagation();
+                c.onClick();
+              }}
+              title={c.title ?? c.label}
+              className={`text-[10px] px-1.5 py-0.5 rounded-full border transition ${
+                c.active
+                  ? 'bg-brand-600 text-white border-brand-600'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-brand-400 hover:text-brand-700'
+              }`}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+
+  // Clickable tile: render as a button so it gets keyboard focus and
+  // proper a11y. Static tile: plain div, same look.
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        title={title}
+        className={`text-left rounded-xl border ${ring} p-3 transition hover:shadow hover:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-300`}
+      >
+        {inner}
+      </button>
+    );
+  }
+  return (
+    <div
+      className={`rounded-xl border ${ring} p-3`}
+      title={title}
+    >
+      {inner}
     </div>
   );
 }
