@@ -288,34 +288,37 @@ export default function UpdateComposer({ project }: Props) {
       </div>
 
       <div className="space-y-1.5">
-        {/* On mobile, show a prominent Dictate button that focuses the
-            textarea (triggering the keyboard to appear with its mic
-            button). The OS-level dictation in Gboard / iOS is the
-            actual engine — dramatically better than the Web Speech API
-            ever was, and zero code to maintain on our side. Hidden on
-            desktop where users just type. */}
+        {/* Dictation hint, mobile only.
+            We can't programmatically open the keyboard's microphone —
+            that's an OS-level UI element on iOS Safari and Android
+            Gboard, sandboxed from web pages. The Web Speech API is the
+            other option, but we shipped a 🎙️ button backed by it once
+            and it had echo / duplicate-token issues on Pixel Chrome
+            we couldn't fix from outside the engine. So this is now a
+            plain notice rather than a button — it doesn't lie about
+            what one tap can do, and it points the user at the keyboard
+            mic which is dramatically better quality anyway. */}
         {isMobile && (
-          <button
-            type="button"
-            className="btn-secondary text-sm w-full"
-            onClick={() => {
-              textareaRef.current?.focus();
-              setToast({
-                kind: 'ok',
-                text: 'Keyboard open — tap the 🎙️ mic button on your keyboard to dictate.',
-              });
-            }}
-            title="Focus the text field and open the keyboard so you can tap the mic button to dictate"
+          <div
+            role="note"
+            className="text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-md p-2 flex items-start gap-2"
           >
-            🎙️ Tap to dictate
-          </button>
+            <span aria-hidden className="text-base leading-none">
+              🎙️
+            </span>
+            <span>
+              <strong>To dictate:</strong> tap the textarea below to open
+              your keyboard, then use the microphone button on the keyboard
+              itself.
+            </span>
+          </div>
         )}
         <textarea
           ref={textareaRef}
           className="input min-h-[110px]"
           placeholder={
             isMobile
-              ? "Tap 🎙️ above or the mic on your keyboard to dictate, or type here…"
+              ? 'Tap here to open the keyboard, then use the keyboard mic to dictate — or just type.'
               : "What happened today? (e.g. Plumber on site, rough-in complete, awaiting electrical inspection.)"
           }
           value={text}

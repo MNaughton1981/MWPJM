@@ -74,11 +74,14 @@ export default function Layout() {
  * to match (and vice versa).
  *
  * Concept:
- *   • Slate rounded-square tile (workshop pegboard hanging on the wall)
- *   • Pegboard hole pattern as the back layer
- *   • Bold sky-blue checkmark in the foreground (tracked / done)
- *   • The upper stem of the check terminates in a crescent-wrench head
- *     in amber — turns the generic "check" into a facilities mark
+ *   • Slate rounded-square tile (the dark home-screen surface)
+ *   • Medium-gray inset plate (the workshop pegboard itself)
+ *   • Dark holes punched through the plate, in a regular grid
+ *   • Bold sky-blue checkmark on top — tracked / done
+ *
+ * The earlier iteration had a crescent-wrench head terminating the
+ * upper stem of the check. It didn't read at small sizes and the
+ * darker pegboard plate hid the holes. Both fixed here.
  */
 function Logo() {
   return (
@@ -97,11 +100,15 @@ function Logo() {
           height="80"
           patternUnits="userSpaceOnUse"
         >
-          <circle cx="40" cy="40" r="9" fill="#020617" />
+          <circle cx="40" cy="40" r="14" fill="#0f172a" />
         </pattern>
       </defs>
+      {/* outer dark frame */}
       <rect width="512" height="512" rx="96" fill="#0f172a" />
-      <rect x="48" y="48" width="416" height="416" rx="56" fill="#1e293b" />
+      {/* medium-gray pegboard plate — slate-500, light enough that the
+          dark slate-900 holes have visible contrast */}
+      <rect x="48" y="48" width="416" height="416" rx="56" fill="#64748b" />
+      {/* perforations */}
       <rect
         x="48"
         y="48"
@@ -110,40 +117,15 @@ function Logo() {
         rx="56"
         fill="url(#hdr-pegboard)"
       />
-      {/* checkmark */}
+      {/* clean checkmark on top */}
       <path
-        d="M132 282 L220 374 L342 198"
+        d="M112 282 L224 388 L408 148"
         fill="none"
-        stroke="#0ea5e9"
-        strokeWidth="48"
+        stroke="#38bdf8"
+        strokeWidth="60"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {/* crescent wrench head at the top of the up-stroke */}
-      <g transform="translate(370 170) rotate(-55)">
-        <rect
-          x="-30"
-          y="-46"
-          width="64"
-          height="92"
-          rx="14"
-          fill="#facc15"
-          stroke="#0f172a"
-          strokeWidth="5"
-        />
-        <path
-          d="M -10 -46 L 18 -46 L 18 -14 L 4 -28 L -10 -14 Z"
-          fill="#0f172a"
-        />
-        <circle
-          cx="-30"
-          cy="6"
-          r="11"
-          fill="#facc15"
-          stroke="#0f172a"
-          strokeWidth="5"
-        />
-      </g>
     </svg>
   );
 }
