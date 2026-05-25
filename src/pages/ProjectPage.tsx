@@ -40,9 +40,9 @@ export default function ProjectPage() {
   if (!project) {
     return (
       <div className="card p-6 text-center text-slate-500">
-        <p>Project not found.</p>
+        <p>Workboard not found.</p>
         <Link to="/projects" className="btn-secondary mt-4">
-          ← Back to Dashboard
+          ← Back to Workboards
         </Link>
       </div>
     );
@@ -91,7 +91,7 @@ export default function ProjectPage() {
   }
 
   function confirmDelete() {
-    if (window.confirm(`Delete project "${project!.name}"? This cannot be undone.`)) {
+    if (window.confirm(`Delete workboard "${project!.name}"? This cannot be undone.`)) {
       deleteProject(project!.id);
       navigate('/projects');
     }
@@ -105,7 +105,7 @@ export default function ProjectPage() {
     <div className="space-y-4">
       <div>
         <Link to="/projects" className="text-sm text-brand-600 hover:underline">
-          ← Dashboard
+          ← Workboards
         </Link>
       </div>
 
@@ -153,6 +153,16 @@ export default function ProjectPage() {
             {project.workOrderId && !woValid && (
               <p className="text-xs text-rose-600 mt-1">
                 Expected format: FWKD followed by digits.
+              </p>
+            )}
+            {!project.workOrderId && (
+              // Backfill nudge for the on-call / Quick Workboard flow:
+              // user starts documenting before they have a WO #, then
+              // pastes the FWKD ID here once they get one. Once a valid
+              // ID is entered, "Post to Nuvolo" lights up automatically.
+              <p className="text-xs text-amber-700 mt-1">
+                📝 No work order linked yet — paste the FWKD # here once you
+                have it. <span className="text-slate-500">Post to Nuvolo stays disabled until then.</span>
               </p>
             )}
             <div className="flex items-center gap-2 flex-wrap mt-1">
@@ -261,7 +271,7 @@ export default function ProjectPage() {
             ↓ .md
           </button>
           <button className="btn-ghost text-xs text-rose-600" onClick={confirmDelete}>
-            Delete project
+            Delete workboard
           </button>
         </div>
       </header>

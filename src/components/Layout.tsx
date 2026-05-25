@@ -1,9 +1,13 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { BUILD_TIME } from '../lib/appUpdate';
 
+// Nav labels:
+//   /projects  → "Workboards" (the list of personal workboards)
+//   /dashboard → "Dashboard"  (read-only view of the imported Nuvolo CSV)
+// Routes are kept as-is to avoid invalidating bookmarks / PWA shortcuts.
 const NAV_ITEMS = [
-  { to: '/projects', label: 'Dashboard' },
-  { to: '/dashboard', label: 'Work Orders' },
+  { to: '/projects', label: 'Workboards' },
+  { to: '/dashboard', label: 'Dashboard' },
   { to: '/reports', label: 'Reports' },
   { to: '/settings', label: 'Settings' },
 ];

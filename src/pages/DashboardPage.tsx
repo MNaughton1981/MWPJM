@@ -74,7 +74,7 @@ export default function DashboardPage() {
   if (!workOrders) {
     return (
       <div className="space-y-4">
-        <h1 className="text-xl font-semibold">Work Orders</h1>
+        <h1 className="text-xl font-semibold">Dashboard</h1>
         <div className="card p-8 text-center space-y-3">
           <h2 className="font-semibold">No work order data loaded yet</h2>
           <p className="text-sm text-slate-600 max-w-md mx-auto">
@@ -93,7 +93,7 @@ export default function DashboardPage() {
     <div className="space-y-4">
       <div className="flex items-baseline justify-between flex-wrap gap-2">
         <div>
-          <h1 className="text-xl font-semibold">Work Orders</h1>
+          <h1 className="text-xl font-semibold">Dashboard</h1>
           <p className="text-xs text-slate-500 mt-0.5">
             Source: <span className="font-mono">{workOrders.sourceFilename}</span>{' '}
             · Imported {formatDateTime(workOrders.importedAt)}
@@ -190,12 +190,15 @@ export default function DashboardPage() {
             <thead>
               <tr className="text-left text-xs text-slate-500 border-b">
                 <th className="px-3 py-2">#</th>
+                {/* Action column placed right after # so on a phone the
+                    user can tap "Open Workboard" without scrolling the
+                    table sideways. */}
+                <th className="px-3 py-2"></th>
                 <th className="px-3 py-2">Description</th>
                 <th className="px-3 py-2">State</th>
                 <th className="px-3 py-2">Pri</th>
                 <th className="px-3 py-2">Assigned</th>
                 <th className="px-3 py-2">Due</th>
-                <th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody>
@@ -228,6 +231,16 @@ export default function DashboardPage() {
                         '—'
                       )}
                     </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <button
+                        className="btn-ghost text-xs"
+                        onClick={() => startProjectFromWO(r)}
+                        disabled={!r.number}
+                        title="Create a quick-view follow-up workboard in MWPJM, pre-filled with this work order's details"
+                      >
+                        Open Workboard
+                      </button>
+                    </td>
                     <td className="px-3 py-2">{r.shortDescription || '—'}</td>
                     <td className="px-3 py-2">
                       {r.state && (
@@ -245,16 +258,6 @@ export default function DashboardPage() {
                     >
                       {r.dueDate || '—'}
                       {overdue && ' ⚠'}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <button
-                        className="btn-ghost text-xs"
-                        onClick={() => startProjectFromWO(r)}
-                        disabled={!r.number}
-                        title="Create a quick-view follow-up project in MWPJM, pre-filled with this work order's details"
-                      >
-                        Open work order →
-                      </button>
                     </td>
                   </tr>
                 );

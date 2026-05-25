@@ -150,7 +150,7 @@ export default function ReportsPage() {
         </div>
         {workOrders && (
           <Link to="/dashboard" className="btn-primary">
-            View Work Orders →
+            View Dashboard →
           </Link>
         )}
       </div>
