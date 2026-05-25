@@ -30,7 +30,11 @@ export function buildNuvoloMail(args: {
   const subject = `RE: ${wo} — Update ${ts}`;
 
   const sig = args.technicianName ? `\n\n— ${args.technicianName}` : '';
-  const body = `${args.updateText.trim()}${sig}\n\n[Posted ${ts} via MWPJM]`;
+  // No app-tag on the body — Nuvolo work order notes should look like
+  // a normal technician email, not something stamped by a side tool.
+  // (To Do and security-notification emails still tag themselves so
+  // the user can spot their own outgoing automation in Sent Items.)
+  const body = `${args.updateText.trim()}${sig}`;
 
   const href =
     `mailto:${encodeURIComponent(to)}` +
