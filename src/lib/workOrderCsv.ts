@@ -187,6 +187,26 @@ function looksLikeWorkOrderRecord(obj: Record<string, unknown>): boolean {
 }
 
 /**
+ * Distinctive top-level shape of a Workboard sync file (see lib/sync.ts).
+ * These get written into the same OneDrive folder as the Nuvolo CSV
+ * exports, and from the file picker they're easy to confuse — but the
+ * right place to load one is Settings → Pull from file…, which
+ * restores projects + settings + the embedded workOrders snapshot in
+ * one shot. If the user drops a sync file on the Reports page we'd
+ * otherwise mis-import the embedded `projects` array as a column-
+ * mapped table of work orders, which is confusing.
+ */
+function looksLikeWorkboardSyncFile(obj: Record<string, unknown>): boolean {
+  return (
+    typeof obj.version === 'number' &&
+    Array.isArray(obj.projects) &&
+    obj.settings !== undefined &&
+    obj.settings !== null &&
+    typeof obj.settings === 'object'
+  );
+}
+
+/**
  * Try to parse the file as NDJSON (newline-delimited JSON — one JSON
  * value per line). Returns null if the content doesn't fit that shape.
  * Used as a fallback when the file isn't a single valid JSON document
@@ -225,6 +245,10 @@ function tryParseNdjson(text: string): unknown[] | null {
  *      { "FWKD0001": { number: "FWKD0001", … }, "FWKD0002": { … } }
  *      — sometimes produced by Power Automate "Create file" actions.
  *
+ * Special case: Workboard sync files (with shape `{ version, projects,
+ * settings, workOrders }`) are detected up front and refused with a
+ * pointer to Settings → Pull from file… — that's where they belong.
+ *
  * Headers are computed as the union of keys across the first 50
  * records, which catches sparse fields without scanning the whole
  * file. If everything fails, the error message lists the actual
@@ -249,6 +273,23 @@ export async function parseJsonFile(
         'File is not valid JSON (and not newline-delimited JSON either).',
       );
     }
+  }
+
+  // Catch Workboard sync files before any of the generic fallbacks
+  // run — otherwise the "first array of objects" fallback would
+  // happily pick up `projects` and present them as a fake work-order
+  // table with mostly empty columns.
+  if (
+    parsed &&
+    typeof parsed === 'object' &&
+    !Array.isArray(parsed) &&
+    looksLikeWorkboardSyncFile(parsed as Record<string, unknown>)
+  ) {
+    throw new Error(
+      "This is a Workboard sync file (projects + settings + a workOrders snapshot), not a Nuvolo export. " +
+        "Apply it under Settings → 'Pull from file…' (Sync section). " +
+        'For a fresh work-order list here on Reports, use the .csv or .xlsx export from Nuvolo instead.',
+    );
   }
 
   let records: Record<string, unknown>[] | null = null;
