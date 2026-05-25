@@ -67,10 +67,10 @@ export default function SettingsPage() {
     try {
       const payload = await pushNow(settings.syncFilename || DEFAULT_SYNC_FILENAME);
       setSyncMsg(
-        `Pushed ${payload.projects.length} project(s) to "${settings.syncFilename || DEFAULT_SYNC_FILENAME}".`,
+        `Sent ${payload.projects.length} project(s) to "${settings.syncFilename || DEFAULT_SYNC_FILENAME}". Other devices can now load the latest.`,
       );
     } catch (e) {
-      setSyncMsg(`Push failed: ${(e as Error).message}`);
+      setSyncMsg(`Send failed: ${(e as Error).message}`);
     } finally {
       setBusy(null);
     }
@@ -85,13 +85,13 @@ export default function SettingsPage() {
       );
       if (!payload) {
         setSyncMsg(
-          `No "${settings.syncFilename || DEFAULT_SYNC_FILENAME}" found in the connected folder yet. Push from another device first, or wait for OneDrive to sync.`,
+          `No "${settings.syncFilename || DEFAULT_SYNC_FILENAME}" found in the connected folder yet. Send from another device first, or wait for OneDrive to sync.`,
         );
         return;
       }
       applyAfterConfirm(payload, 'connected folder');
     } catch (e) {
-      setSyncMsg(`Pull failed: ${(e as Error).message}`);
+      setSyncMsg(`Load failed: ${(e as Error).message}`);
     } finally {
       setBusy(null);
     }
@@ -104,7 +104,7 @@ export default function SettingsPage() {
       const payload = await pullFromFile(file);
       applyAfterConfirm(payload, file.name);
     } catch (e) {
-      setSyncMsg(`Pull failed: ${(e as Error).message}`);
+      setSyncMsg(`Load failed: ${(e as Error).message}`);
     } finally {
       setBusy(null);
     }
@@ -121,12 +121,12 @@ export default function SettingsPage() {
         `\nAny edits made on this device since the last sync will be lost.`,
     );
     if (!ok) {
-      setSyncMsg('Pull cancelled — local state unchanged.');
+      setSyncMsg('Load cancelled — local state unchanged.');
       return;
     }
     applySyncedState(payload);
     setSyncMsg(
-      `Applied ${payload.projects.length} project(s) from ${source}.`,
+      `Loaded ${payload.projects.length} project(s) from ${source}.`,
     );
   }
 
@@ -318,20 +318,23 @@ export default function SettingsPage() {
         <div>
           <h2 className="font-semibold">Sync state via OneDrive</h2>
           <p className="text-xs text-slate-500 mt-1">
-            Auto-write a JSON snapshot of your projects, settings, and last
-            imported work-order CSV to the connected folder. OneDrive
+            Workboard saves a JSON snapshot of your projects, settings, and
+            last imported work-order CSV to the connected folder. OneDrive
             replicates it to your other devices, where you can pull the
-            latest with one tap. <strong>Photos stay on the device that
-            took them</strong> — they're too big to ship through this
-            channel; only the captions / filenames travel.
+            latest with one tap. Use the buttons below to send your
+            current state to OneDrive (so other devices can load it) or
+            get the latest state another device sent. <strong>Photos
+            stay on the device that took them</strong> — they're too big
+            to ship through this channel; only the captions / filenames
+            travel.
           </p>
         </div>
 
         {!folderApi && (
           <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
             <strong>Auto-sync isn't supported on this browser.</strong> On
-            iPhone Safari and mobile Chrome, use <em>Pull from file…</em> below
-            to import a synced state file you've opened from the OneDrive
+            iPhone Safari and mobile Chrome, use <em>↓ Load saved file…</em>{' '}
+            below to import a snapshot file you've opened from the OneDrive
             app.
           </div>
         )}
@@ -365,9 +368,9 @@ export default function SettingsPage() {
                 }
               />
               <span>
-                <strong>Auto-sync to this folder</strong> — write the latest
-                state file every time something changes. Recommended on the
-                desktop you use most.
+                <strong>Auto-send updates from this device</strong> — write
+                the latest state file to OneDrive every time something
+                changes here. Recommended on the device you edit on most.
               </span>
             </label>
           </>
@@ -396,17 +399,21 @@ export default function SettingsPage() {
                 className="btn-primary text-sm"
                 onClick={pushSyncNow}
                 disabled={busy !== null}
-                title="Write the current state to the connected folder right now"
+                title="Save THIS device's current state to OneDrive so your other device(s) can load the latest from there."
               >
-                {busy === 'push' ? 'Pushing…' : '↑ Push now'}
+                {busy === 'push'
+                  ? 'Sending…'
+                  : '↑ Send: This device → other devices'}
               </button>
               <button
                 className="btn-secondary text-sm"
                 onClick={pullSyncFromFolder}
                 disabled={busy !== null}
-                title="Read the sync file from the connected folder and apply it"
+                title="Load the latest state another device sent to OneDrive into THIS device."
               >
-                {busy === 'pull' ? 'Pulling…' : '↓ Pull from folder'}
+                {busy === 'pull'
+                  ? 'Loading…'
+                  : '↓ Get: Other devices → this device'}
               </button>
             </>
           )}
@@ -414,9 +421,9 @@ export default function SettingsPage() {
             className="btn-secondary text-sm"
             onClick={() => syncFileRef.current?.click()}
             disabled={busy !== null}
-            title="Pick a sync file from your device (works everywhere — use this on mobile)"
+            title="Pick a snapshot file from your device picker and load it. Use this on iOS Safari and any other browser where folder access isn't supported."
           >
-            Pull from file…
+            ↓ Load saved file…
           </button>
           <input
             ref={syncFileRef}

@@ -146,47 +146,222 @@ export async function parseXlsxFile(
 }
 
 /**
+ * Wrapper keys we recognize at the top level of a JSON file as
+ * "the array of records lives here". Order matters — earlier keys
+ * win when multiple are present.
+ *
+ *   - result:                ServiceNow REST table API
+ *   - records / data / rows: common bespoke exports
+ *   - value:                 OData / Microsoft Graph / SharePoint REST / Power Automate "Get items"
+ *   - items / entries:       further common alternates
+ */
+const JSON_RECORD_WRAPPER_KEYS = [
+  'result',
+  'records',
+  'data',
+  'rows',
+  'value',
+  'items',
+  'entries',
+] as const;
+
+/**
+ * Heuristic: does this object look like a *single* work order record
+ * (rather than a wrapper around one)? Used to handle one-row exports
+ * that show up as a top-level object instead of a one-element array.
+ */
+function looksLikeWorkOrderRecord(obj: Record<string, unknown>): boolean {
+  const keys = Object.keys(obj).map((k) =>
+    k.toLowerCase().replace(/[^a-z0-9]/g, ''),
+  );
+  const hints = [
+    'number',
+    'shortdescription',
+    'description',
+    'state',
+    'priority',
+    'fwkd',
+    'workorder',
+  ];
+  return hints.some((h) => keys.includes(h));
+}
+
+/**
+ * Distinctive top-level shape of a Workboard sync file (see lib/sync.ts).
+ * These get written into the same OneDrive folder as the Nuvolo CSV
+ * exports, and from the file picker they're easy to confuse — but the
+ * right place to load one is Settings → Pull from file…, which
+ * restores projects + settings + the embedded workOrders snapshot in
+ * one shot. If the user drops a sync file on the Reports page we'd
+ * otherwise mis-import the embedded `projects` array as a column-
+ * mapped table of work orders, which is confusing.
+ */
+function looksLikeWorkboardSyncFile(obj: Record<string, unknown>): boolean {
+  return (
+    typeof obj.version === 'number' &&
+    Array.isArray(obj.projects) &&
+    obj.settings !== undefined &&
+    obj.settings !== null &&
+    typeof obj.settings === 'object'
+  );
+}
+
+/**
+ * Try to parse the file as NDJSON (newline-delimited JSON — one JSON
+ * value per line). Returns null if the content doesn't fit that shape.
+ * Used as a fallback when the file isn't a single valid JSON document
+ * but each line is — ServiceNow's bulk-export option does this, as do
+ * many command-line tools (jq, etc.).
+ */
+function tryParseNdjson(text: string): unknown[] | null {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length === 0) return null;
+  const out: unknown[] = [];
+  for (const l of lines) {
+    try {
+      out.push(JSON.parse(l));
+    } catch {
+      return null;
+    }
+  }
+  return out;
+}
+
+/**
  * JSON parser for ServiceNow / Nuvolo work order exports.
  *
- * Accepts any of these shapes:
- *   1. Top-level array:           [ { number: "FWKD…", … }, … ]
- *   2. ServiceNow REST envelope:  { result: [ { number: "…", … }, … ] }
- *   3. Common alternates:         { records: […] } | { data: […] } | { rows: […] }
- *   4. ServiceNow display values: { number: { display_value: "FWKD…", value: "FWKD…" }, … }
- *      — flattened to the display_value (falling back to value).
+ * Supports a wide range of shapes because Power Automate and other
+ * routing tools sometimes nest the array in unexpected places:
  *
- * Headers are computed as the union of keys across the first 50 records,
- * which catches sparse fields without scanning the entire file.
+ *   1. Top-level array:           [ { number: "FWKD…", … }, … ]
+ *   2. Wrapped under a known key: { result | records | data | rows | value | items | entries: [...] }
+ *   3. NDJSON (one per line):     {"number":"FWKD…",…}\n{"number":"…",…}\n…
+ *   4. ServiceNow display values: { number: { display_value: "FWKD…", value: "FWKD…" }, … }
+ *      — flattened to display_value (falling back to value).
+ *   5. First nested array of objects, anywhere at the top level —
+ *      catches generic wrappers like { meta: …, queryResults: [...] }.
+ *   6. Single record at the top level (wrapped to a one-element array).
+ *   7. Object map keyed by record ID:
+ *      { "FWKD0001": { number: "FWKD0001", … }, "FWKD0002": { … } }
+ *      — sometimes produced by Power Automate "Create file" actions.
+ *
+ * Special case: Workboard sync files (with shape `{ version, projects,
+ * settings, workOrders }`) are detected up front and refused with a
+ * pointer to Settings → Pull from file… — that's where they belong.
+ *
+ * Headers are computed as the union of keys across the first 50
+ * records, which catches sparse fields without scanning the whole
+ * file. If everything fails, the error message lists the actual
+ * top-level keys so the user can paste them back and the parser can
+ * be extended in seconds.
  */
 export async function parseJsonFile(
   file: File,
 ): Promise<{ headers: string[]; rows: Record<string, string>[] }> {
   const text = await file.text();
+
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    throw new Error('File is not valid JSON.');
+    // Fall back to NDJSON — common for streamed / line-based exports.
+    const ndjson = tryParseNdjson(text);
+    if (ndjson) {
+      parsed = ndjson;
+    } else {
+      throw new Error(
+        'File is not valid JSON (and not newline-delimited JSON either).',
+      );
+    }
   }
-  let records: Record<string, unknown>[];
+
+  // Catch Workboard sync files before any of the generic fallbacks
+  // run — otherwise the "first array of objects" fallback would
+  // happily pick up `projects` and present them as a fake work-order
+  // table with mostly empty columns.
+  if (
+    parsed &&
+    typeof parsed === 'object' &&
+    !Array.isArray(parsed) &&
+    looksLikeWorkboardSyncFile(parsed as Record<string, unknown>)
+  ) {
+    throw new Error(
+      "This is a Workboard sync file (projects + settings + a workOrders snapshot), not a Nuvolo export. " +
+        "Apply it under Settings → 'Pull from file…' (Sync section). " +
+        'For a fresh work-order list here on Reports, use the .csv or .xlsx export from Nuvolo instead.',
+    );
+  }
+
+  let records: Record<string, unknown>[] | null = null;
+
   if (Array.isArray(parsed)) {
     records = parsed as Record<string, unknown>[];
   } else if (parsed && typeof parsed === 'object') {
     const obj = parsed as Record<string, unknown>;
-    const candidate =
-      (Array.isArray(obj.result) && (obj.result as unknown[])) ||
-      (Array.isArray(obj.records) && (obj.records as unknown[])) ||
-      (Array.isArray(obj.data) && (obj.data as unknown[])) ||
-      (Array.isArray(obj.rows) && (obj.rows as unknown[])) ||
-      null;
-    if (!candidate) {
+
+    // 1. Known wrapper keys (priority order)
+    for (const key of JSON_RECORD_WRAPPER_KEYS) {
+      if (Array.isArray(obj[key])) {
+        records = obj[key] as Record<string, unknown>[];
+        break;
+      }
+    }
+
+    // 2. Generic fallback: any top-level array-of-objects we haven't
+    //    matched yet. Catches wrappers like { meta:{…}, results:[…] }
+    //    where the array key isn't one we already special-case.
+    if (!records) {
+      for (const v of Object.values(obj)) {
+        if (
+          Array.isArray(v) &&
+          v.length > 0 &&
+          typeof v[0] === 'object' &&
+          v[0] !== null &&
+          !Array.isArray(v[0])
+        ) {
+          records = v as Record<string, unknown>[];
+          break;
+        }
+      }
+    }
+
+    // 3. Single record at top level → wrap to a one-element array.
+    //    Only if the object's keys look work-order-shaped, so we don't
+    //    mistakenly treat a metadata wrapper as a record.
+    if (!records && looksLikeWorkOrderRecord(obj)) {
+      records = [obj];
+    }
+
+    // 4. Object map keyed by ID: every value is a record-shaped object.
+    if (!records) {
+      const values = Object.values(obj);
+      if (
+        values.length > 0 &&
+        values.every(
+          (v) =>
+            v !== null &&
+            typeof v === 'object' &&
+            !Array.isArray(v) &&
+            looksLikeWorkOrderRecord(v as Record<string, unknown>),
+        )
+      ) {
+        records = values as Record<string, unknown>[];
+      }
+    }
+
+    if (!records) {
+      const keys = Object.keys(obj).slice(0, 12);
+      const keysList = keys.length ? keys.join(', ') : '(no top-level keys)';
       throw new Error(
-        'JSON does not contain a top-level array or a "result" / "records" / "data" / "rows" array.',
+        `JSON has top-level keys [${keysList}] but no recognizable records array. ` +
+          `Expected one of: ${JSON_RECORD_WRAPPER_KEYS.join(', ')} — ` +
+          `or a top-level array of records.`,
       );
     }
-    records = candidate as Record<string, unknown>[];
   } else {
-    throw new Error('JSON must be an array of records or an object with one.');
+    throw new Error(
+      'JSON must be an array of records, an object containing one, or NDJSON.',
+    );
   }
   if (records.length === 0) return { headers: [], rows: [] };
 

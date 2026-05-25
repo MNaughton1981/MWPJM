@@ -3,74 +3,57 @@
     Workboard mark.
 
     Concept: a workshop pegboard plate with a bold sky-blue checkmark
-    in the foreground; the upper stem of the check terminates in an
-    amber crescent-wrench head. Reads at three levels:
+    in the foreground. Two-layer message:
 
       • The pegboard tile says "facilities / workbench / hands-on."
       • The checkmark says "tracked / done / closed out."
-      • The wrench head says "fix it" — turning the check into a
-        maintenance icon rather than just a generic todo tick.
 
-    Palette is the existing slate / sky / amber the rest of the app
-    already uses, so the home-screen tile and the in-app chrome stay
-    visually consistent.
+    Earlier iteration tried a crescent-wrench head terminating the
+    upper stem of the check; at favicon and home-screen-tile size the
+    wrench shape didn't read clearly, so we dropped it for a clean
+    check. The pegboard plate is now medium-gray (slate-500) instead
+    of the old near-black slate-800 — that gives the dark holes
+    enough contrast to actually show up on a dark home screen.
+
+    Palette stays on the existing slate / sky / amber so the home-
+    screen tile and the in-app chrome remain visually consistent.
   -->
   <defs>
     <!-- Pegboard hole pattern: one 80x80 tile with a single dark hole.
-         Tiled across the inset plate to give the perforated workshop
-         look without listing 25 individual circles. -->
+         Tiled across the inset plate. Holes are slate-900 (same as
+         the outer frame) so they read as "punched all the way through
+         to the dark surface behind." Hole radius 14 (was 9) so they
+         don't disappear at small icon sizes. -->
     <pattern id="pegboard-holes"
              x="16" y="16"
              width="80" height="80"
              patternUnits="userSpaceOnUse">
-      <circle cx="40" cy="40" r="9" fill="#020617"/>
+      <circle cx="40" cy="40" r="14" fill="#0f172a"/>
     </pattern>
   </defs>
 
-  <!-- Outer slate tile (rounded square) — the home-screen surface. -->
+  <!-- Outer slate frame (rounded square) — the home-screen surface
+       and the dark backdrop the holes "punch through" to. -->
   <rect width="512" height="512" rx="96" fill="#0f172a"/>
 
-  <!-- Inset pegboard plate, slightly lighter than the tile so it reads
-       as the actual board hanging on the wall. -->
-  <rect x="48" y="48" width="416" height="416" rx="56" fill="#1e293b"/>
+  <!-- Inset pegboard plate. Medium gray (slate-500) so the dark
+       holes have somewhere to contrast against. The earlier slate-800
+       was too close to the slate-900 frame and the holes vanished. -->
+  <rect x="48" y="48" width="416" height="416" rx="56" fill="#64748b"/>
   <!-- Hole pattern overlay -->
   <rect x="48" y="48" width="416" height="416" rx="56" fill="url(#pegboard-holes)"/>
 
-  <!-- ===== Checkmark stroke =====
+  <!-- ===== Checkmark =====
        Classic check shape: short down-stroke from mid-left to a low
-       valley, then a long up-stroke aimed at the upper-right where the
-       wrench head sits. The up-stroke stops 30-ish px short of the
-       wrench head so the head reads as the terminus of the stroke,
-       not a sticker on top of it. -->
-  <path d="M132 282 L220 374 L342 198"
+       valley, then a long up-stroke aimed at the upper-right corner.
+       Stroke 60 (was 48) so the check is the unmistakable focal
+       element even at favicon size. Sky-400 — brighter than the
+       brand-600 used elsewhere in the UI, deliberately, because the
+       icon needs to pop on a wide range of OS home-screen wallpapers. -->
+  <path d="M112 282 L224 388 L408 148"
         fill="none"
-        stroke="#0ea5e9"
-        stroke-width="48"
+        stroke="#38bdf8"
+        stroke-width="60"
         stroke-linecap="round"
         stroke-linejoin="round"/>
-
-  <!-- ===== Crescent wrench head =====
-       Positioned at the visual tip of the upper stem and rotated to
-       extend the up-stroke (~ -55deg from horizontal). Built from:
-         • a rounded-rectangle body (the head + handle stub)
-         • a V-notch on the leading edge (the adjustable jaw opening)
-         • a small circle on the side (the worm-gear adjustment knob,
-           which is what gives a crescent wrench its asymmetric
-           silhouette and tells the eye "wrench" not "spanner") -->
-  <g transform="translate(370 170) rotate(-55)">
-    <!-- main rounded body, amber to pop against slate + sky -->
-    <rect x="-30" y="-46" width="64" height="92" rx="14"
-          fill="#facc15"
-          stroke="#0f172a"
-          stroke-width="5"/>
-    <!-- jaw notch: cut a wedge out of the upper edge so the head
-         visibly "opens" — this is what makes it read as a wrench -->
-    <path d="M -10 -46 L 18 -46 L 18 -14 L 4 -28 L -10 -14 Z"
-          fill="#0f172a"/>
-    <!-- adjustment knob on the side -->
-    <circle cx="-30" cy="6" r="11"
-            fill="#facc15"
-            stroke="#0f172a"
-            stroke-width="5"/>
-  </g>
 </svg>
