@@ -102,8 +102,12 @@ interface AppState {
 const defaultSettings: Settings = {
   technicianName: '',
   nuvoloEmail: DEFAULT_NUVOLO_EMAIL,
-  reportFolderPath:
-    'C:\\Users\\mnaughto\\OneDrive - MathWorks\\Projects\\Nuvolo Dev\\fegpjm\\reports\\open_work_orders',
+  // Empty by default so the path each colleague sees on first run isn't
+  // pre-filled with someone else's OneDrive path / Windows username.
+  // The Settings input has a generic placeholder hint, and the Reports
+  // page "Connect folder" flow is what actually grants permission —
+  // this string is just a display-only reminder.
+  reportFolderPath: '',
   photoNamingPattern: DEFAULT_PHOTO_NAMING_PATTERN,
   userEmail: '',
   nuvoloWorkOrderUrlPattern: DEFAULT_WO_URL_PATTERN,

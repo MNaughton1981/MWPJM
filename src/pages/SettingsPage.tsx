@@ -146,7 +146,7 @@ export default function SettingsPage() {
           <label className="label">Your name (used in update sign-off)</label>
           <input
             className="input"
-            placeholder="Mike N."
+            placeholder="Your name"
             value={settings.technicianName}
             onChange={(e) => setSettings({ technicianName: e.target.value })}
           />
@@ -481,12 +481,13 @@ export default function SettingsPage() {
       <section className="card p-4 space-y-2">
         <h2 className="font-semibold">About</h2>
         <p className="text-sm text-slate-600">
-          MWPJM is a local-first PWA. No server, no account. Your data lives in
-          this browser's storage (and any backup files you create).
+          Workboard is a local-first PWA. No server, no account. Your data
+          lives in this browser's storage (and any backup files you create).
         </p>
         <p className="text-xs text-slate-500">
-          Install: in Chrome on your Pixel, tap the menu → "Add to Home screen."
-          On iPhone Safari, tap the share button → "Add to Home Screen."
+          Install: in Chrome on Android, tap the menu → "Install app" or
+          "Add to Home screen." On iPhone Safari, tap the Share button →
+          "Add to Home Screen."
         </p>
         <div className="border-t pt-3 mt-2 space-y-2">
           <div className="text-xs text-slate-500">

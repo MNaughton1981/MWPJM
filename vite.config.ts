@@ -17,10 +17,10 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icon.svg'],
       manifest: {
-        name: 'MWPJM — Facilities Project Manager',
-        short_name: 'MWPJM',
+        name: 'Workboard — Facilities Project Manager',
+        short_name: 'Workboard',
         description:
-          'Lean project manager for facilities technicians with Nuvolo work order email integration.',
+          'Lean project manager for facilities technicians and engineers, with Nuvolo work order email integration.',
         theme_color: '#0f172a',
         background_color: '#0f172a',
         display: 'standalone',
