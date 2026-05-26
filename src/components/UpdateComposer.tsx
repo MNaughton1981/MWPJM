@@ -43,8 +43,21 @@ type Toast = { kind: 'ok' | 'err'; text: string } | null;
 export default function UpdateComposer({ project }: Props) {
   const settings = useStore((s) => s.settings);
   const addActivity = useStore((s) => s.addActivity);
+  // Sticky-draft plumbing — read text from / write text back to the
+  // store so it survives navigating away from the workboard, the PWA
+  // being backgrounded, or the device locking. Component-local
+  // useState would have lost everything every time.
+  const text = useStore((s) => s.composerDrafts[project.id] ?? '');
+  const setComposerDraft = useStore((s) => s.setComposerDraft);
+  const clearComposerDraft = useStore((s) => s.clearComposerDraft);
 
-  const [text, setText] = useState('');
+  function setText(next: string) {
+    setComposerDraft(project.id, next);
+  }
+  function clearDraft() {
+    clearComposerDraft(project.id);
+  }
+
   const [showReminder, setShowReminder] = useState(false);
   const [reminderAt, setReminderAt] = useState<string>(() =>
     isoLocalInput(defaultReminderDate()),
@@ -119,7 +132,7 @@ export default function UpdateComposer({ project }: Props) {
               text: shareText,
             });
             logActivity({ postedToNuvolo: true });
-            setText('');
+            clearDraft();
             setToast({
               kind: 'ok',
               text: `Shared with ${files.length} photo(s) — send from your mail app.`,
@@ -154,18 +167,29 @@ export default function UpdateComposer({ project }: Props) {
     } else {
       window.location.href = nuvoloMail.href;
     }
-    setText('');
+    clearDraft();
   }
 
   function logOnly() {
     if (!text.trim()) return;
     logActivity({ postedToNuvolo: false });
-    setText('');
+    clearDraft();
     setToast({ kind: 'ok', text: 'Logged to activity.' });
   }
 
   function sendToToDo() {
     if (!text.trim()) return;
+    if (!settings.userEmail.trim()) {
+      // Without a configured user email the mailto: opens a blank
+      // To: field in the mail client and the whole flow looks broken.
+      // Hard-stop here with an explicit hint instead of letting the
+      // user think the button is just buggy.
+      setToast({
+        kind: 'err',
+        text: 'Set "Your email" in Settings → Technician to use the To Do flow.',
+      });
+      return;
+    }
     const mail = buildToDoMail({
       text,
       userEmail: settings.userEmail,
@@ -173,7 +197,7 @@ export default function UpdateComposer({ project }: Props) {
     });
     logActivity({ postedToNuvolo: false });
     window.location.href = mail.href;
-    setText('');
+    clearDraft();
   }
 
   async function copy() {
@@ -188,7 +212,7 @@ export default function UpdateComposer({ project }: Props) {
     if (ok) {
       logActivity({ postedToNuvolo: false });
       setToast({ kind: 'ok', text: 'Copied — paste into OneNote / wherever.' });
-      setText('');
+      clearDraft();
     } else {
       setToast({ kind: 'err', text: 'Copy failed (clipboard not available).' });
     }
@@ -207,11 +231,11 @@ export default function UpdateComposer({ project }: Props) {
       setToast({ kind: 'err', text: 'Clipboard is empty.' });
       return;
     }
-    setText((prev) => {
-      if (!prev) return clip;
-      const sep = prev.endsWith('\n') ? '' : '\n';
-      return `${prev}${sep}${clip}`;
-    });
+    // Append to whatever's already in the draft. We can't pass a
+    // function to setText anymore (it now writes to the store, not
+    // local state), so read the current draft directly.
+    const sep = !text || text.endsWith('\n') ? '' : '\n';
+    setText(text ? `${text}${sep}${clip}` : clip);
     setToast({ kind: 'ok', text: `Pasted ${clip.length} characters.` });
   }
 
@@ -231,7 +255,7 @@ export default function UpdateComposer({ project }: Props) {
       });
       if (result === 'shared') {
         logActivity({ postedToNuvolo: false });
-        setText('');
+        clearDraft();
       }
     } catch (e) {
       setToast({ kind: 'err', text: (e as Error).message });
@@ -271,7 +295,7 @@ export default function UpdateComposer({ project }: Props) {
     downloadIcs(`mwpjm-${safeName}.ics`, ics);
     logActivity({ postedToNuvolo: false });
     setShowReminder(false);
-    setText('');
+    clearDraft();
     setToast({
       kind: 'ok',
       text: 'Reminder downloaded. Open the .ics file to add to Outlook.',

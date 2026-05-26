@@ -37,6 +37,20 @@ interface AppState {
    */
   syncError: string | null;
 
+  /**
+   * In-progress Compose Note text, keyed by project id. Lets the user
+   * walk away from a workboard or background the PWA without losing
+   * what they've typed — the textarea reads from this map and writes
+   * back on every keystroke instead of holding the value in component-
+   * local state. Cleared explicitly when the user fires off the note
+   * (Post to Nuvolo, To Do, Reminder, Copy, Share, Log only).
+   *
+   * Stored outside the project objects so typing into the textarea
+   * doesn't bump `updatedAt` and reorder the Workboards list on every
+   * keystroke. Persisted via zustand persist alongside everything else.
+   */
+  composerDrafts: Record<string, string>;
+
   // Project CRUD
   addProject: (p: Project) => void;
   updateProject: (id: string, patch: Partial<Project>) => void;
@@ -76,6 +90,10 @@ interface AppState {
 
   // Settings
   setSettings: (patch: Partial<Settings>) => void;
+
+  // Composer drafts (sticky textarea text per workboard)
+  setComposerDraft: (projectId: string, text: string) => void;
+  clearComposerDraft: (projectId: string) => void;
 
   // Work orders (imported from Nuvolo CSV)
   setWorkOrders: (data: ImportedWorkOrders | null) => void;
@@ -130,6 +148,7 @@ export const useStore = create<AppState>()(
       workOrders: null,
       lastSyncedAt: null,
       syncError: null,
+      composerDrafts: {},
 
       addProject: (p) =>
         set((s) => ({ projects: [p, ...s.projects] })),
@@ -145,7 +164,16 @@ export const useStore = create<AppState>()(
         // Fire-and-forget cleanup of any photos in IndexedDB. We don't
         // block the UI on this; if it fails the orphaned blobs are harmless.
         deleteProjectPhotos(id).catch(() => undefined);
-        set((s) => ({ projects: s.projects.filter((p) => p.id !== id) }));
+        set((s) => {
+          // Drop any composer draft for the deleted project too — no
+          // point persisting orphaned text the user can never get back to.
+          const { [id]: _drop, ...rest } = s.composerDrafts;
+          void _drop;
+          return {
+            projects: s.projects.filter((p) => p.id !== id),
+            composerDrafts: rest,
+          };
+        });
       },
 
       addTrade: (projectId, t) =>
@@ -315,6 +343,21 @@ export const useStore = create<AppState>()(
       setSettings: (patch) =>
         set((s) => ({ settings: { ...s.settings, ...patch } })),
 
+      setComposerDraft: (projectId, text) =>
+        set((s) => ({
+          composerDrafts: { ...s.composerDrafts, [projectId]: text },
+        })),
+
+      clearComposerDraft: (projectId) =>
+        set((s) => {
+          // Skip the work if there's nothing to clear — avoids triggering
+          // a no-op store update that would re-render every subscriber.
+          if (!(projectId in s.composerDrafts)) return s;
+          const { [projectId]: _drop, ...rest } = s.composerDrafts;
+          void _drop;
+          return { composerDrafts: rest };
+        }),
+
       setWorkOrders: (data) => set(() => ({ workOrders: data })),
 
       replaceAll: (data) =>
@@ -363,6 +406,11 @@ export const useStore = create<AppState>()(
           ...current,
           ...p,
           settings: mergedSettings,
+          // Backfill composerDrafts for users whose persisted state
+          // predates this field — without this, the field is undefined
+          // on rehydrate and the very first setComposerDraft spreads
+          // into `undefined`, blowing up.
+          composerDrafts: p.composerDrafts ?? current.composerDrafts,
         };
       },
     },

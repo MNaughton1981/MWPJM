@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { BUILD_TIME } from '../lib/appUpdate';
+import UpdatePrompt from './UpdatePrompt';
 
 // Nav labels:
 //   /dashboard → "Dashboard"  (read-only view of the imported Nuvolo CSV)
@@ -60,6 +61,12 @@ export default function Layout() {
           Build {BUILD_TIME}
         </div>
       </footer>
+
+      {/* Floating "new version available" banner. Renders nothing
+          when there's no waiting service worker; pinned bottom-right
+          (full-width on mobile) when there is. Mounted globally so
+          it shows on every route. */}
+      <UpdatePrompt />
     </div>
   );
 }

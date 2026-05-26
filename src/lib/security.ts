@@ -1,5 +1,5 @@
 import type { Vendor } from '../types';
-import { formatDate, formatStamp } from './format';
+import { formatDate } from './format';
 
 export interface SecurityNotificationArgs {
   vendor: Vendor;
@@ -25,6 +25,21 @@ export const DEFAULT_SECURITY_PREAMBLE =
  * Build a structured "vendor visit" notification email targeting the
  * facility security team. Uses the same lean pattern as Nuvolo updates:
  * builds a mailto: URL and hands off to the user's default mail client.
+ *
+ * Body formatting:
+ *   - Section headings (Vendor / Visit / Notes) are wrapped in en-dash
+ *     decorators so they read as visually distinct in plain-text mail
+ *     clients. mailto: URLs do not support HTML bodies (every desktop
+ *     and mobile client treats the body as text/plain regardless of
+ *     headers we'd try to set), so this is the closest we can get to
+ *     "bold" without making the user round-trip through copy/paste.
+ *   - Field rows are flush-left under each section, no two-space
+ *     indent, matching how the user requested the layout.
+ *   - No app signature line. Earlier the body was tagged with
+ *     "[Sent <timestamp> via MWPJM]" so the user could spot their own
+ *     security notifications in Sent Items; the user dropped that
+ *     ask along with the matching tag on Nuvolo posts because the
+ *     emails should read as normal technician correspondence.
  */
 export function buildSecurityNotification(
   args: SecurityNotificationArgs,
@@ -32,10 +47,14 @@ export function buildSecurityNotification(
   const visitDate = args.vendor.visitDate
     ? formatDate(args.vendor.visitDate)
     : 'TBD';
-  const ts = formatStamp();
 
   const companySuffix = args.vendor.company ? ` (${args.vendor.company})` : '';
   const subject = `Vendor visit notice: ${args.vendor.name}${companySuffix} — ${visitDate}`;
+
+  /** Plain-text "bold-ish" section heading. Three en-dashes either side
+   *  reads as a clear visual break in any mail client and survives
+   *  word-wrap better than ASCII underlines. */
+  const heading = (label: string): string => `─── ${label} ───`;
 
   const lines: string[] = [];
   if (args.preamble) {
@@ -43,34 +62,32 @@ export function buildSecurityNotification(
     lines.push('');
   }
 
-  lines.push('Vendor');
-  lines.push(`  Name: ${args.vendor.name}`);
-  if (args.vendor.company) lines.push(`  Company: ${args.vendor.company}`);
-  if (args.vendor.role) lines.push(`  Role: ${args.vendor.role}`);
-  if (args.vendor.phone) lines.push(`  Phone: ${args.vendor.phone}`);
-  if (args.vendor.email) lines.push(`  Email: ${args.vendor.email}`);
+  lines.push(heading('Vendor'));
+  lines.push(`Name: ${args.vendor.name}`);
+  if (args.vendor.company) lines.push(`Company: ${args.vendor.company}`);
+  if (args.vendor.role) lines.push(`Role: ${args.vendor.role}`);
+  if (args.vendor.phone) lines.push(`Phone: ${args.vendor.phone}`);
+  if (args.vendor.email) lines.push(`Email: ${args.vendor.email}`);
 
   lines.push('');
-  lines.push('Visit');
-  lines.push(`  Date: ${visitDate}`);
-  if (args.project.location) lines.push(`  Location: ${args.project.location}`);
+  lines.push(heading('Visit'));
+  lines.push(`Date: ${visitDate}`);
+  if (args.vendor.visitTime) lines.push(`Time: ${args.vendor.visitTime}`);
+  if (args.project.location) lines.push(`Location: ${args.project.location}`);
   if (args.project.workOrderId)
-    lines.push(`  Work Order: ${args.project.workOrderId}`);
-  lines.push(`  Project: ${args.project.name}`);
+    lines.push(`Work Order: ${args.project.workOrderId}`);
+  lines.push(`Project: ${args.project.name}`);
 
   if (args.vendor.notes) {
     lines.push('');
-    lines.push('Notes');
-    lines.push(`  ${args.vendor.notes}`);
+    lines.push(heading('Notes'));
+    lines.push(args.vendor.notes);
   }
 
   if (args.technicianName) {
     lines.push('');
     lines.push(`Requested by: ${args.technicianName}`);
   }
-
-  lines.push('');
-  lines.push(`[Sent ${ts} via MWPJM]`);
 
   const body = lines.join('\n');
   // Defensive trims — these arguments may have been undefined in older

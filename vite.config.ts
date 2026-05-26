@@ -14,7 +14,15 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' (was 'autoUpdate'): when a new build is available the
+      // browser still installs the updated SW in the background, but
+      // doesn't auto-claim and reload. The app surfaces the "new
+      // version available" banner from src/components/UpdatePrompt.tsx
+      // and the user clicks Reload when it's safe (i.e. they aren't
+      // mid-typing into a form). Trades the "always silently up to
+      // date" property for "users notice + control when an update
+      // happens", which the user explicitly asked for.
+      registerType: 'prompt',
       includeAssets: ['icon.svg'],
       manifest: {
         name: 'Workboard — Facilities Project Manager',
