@@ -422,7 +422,7 @@ export default function DashboardPage() {
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       <button
-                        className="btn-ghost text-xs"
+                        className="btn-secondary text-xs"
                         onClick={() => startProjectFromWO(r)}
                         disabled={!r.number}
                         title="Create a quick-view follow-up workboard, pre-filled with this work order's details"

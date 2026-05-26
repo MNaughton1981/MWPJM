@@ -40,6 +40,7 @@ export default function VendorsSection({ project }: Props) {
       phone: '',
       email: '',
       visitDate: '',
+      visitTime: '',
       notes: '',
     });
     setShowAdd(false);
@@ -188,6 +189,19 @@ function VendorCard({
             onChange={(e) =>
               onChange({ visitDate: e.target.value || undefined })
             }
+          />
+        </div>
+        <div>
+          <label className="label">Visit time</label>
+          <input
+            type="text"
+            className="input"
+            placeholder="7:00 AM, or 8:00 AM – 10:00 AM"
+            value={vendor.visitTime ?? ''}
+            onChange={(e) =>
+              onChange({ visitTime: e.target.value || undefined })
+            }
+            title="Free-form — type a fixed time or a window. Goes verbatim into the security notification email."
           />
         </div>
       </div>

@@ -55,6 +55,15 @@ export interface Vendor {
   phone?: string;
   email?: string;
   visitDate?: string; // ISO date (YYYY-MM-DD)
+  /**
+   * Free-form visit time hint, surfaced in the security notification
+   * email under the Visit section. Intentionally a string rather than
+   * a structured time-of-day field so the user can express either a
+   * fixed time ("7:00 AM") or a window ("8:00 AM – 10:00 AM") without
+   * the form forcing one shape over the other. No validation — what
+   * the user types here is what the email gets.
+   */
+  visitTime?: string;
   notes?: string;
 }
 
