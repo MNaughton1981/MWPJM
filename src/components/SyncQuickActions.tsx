@@ -19,14 +19,19 @@ import { formatDateTime } from '../lib/format';
  *
  * The buttons shown adapt to the device's capabilities:
  *
- *   - Mobile / Safari (File System Access API absent): only ↓ Pull
- *     is shown, and it opens a file picker so the user can grab the
- *     synced state file from the OneDrive app.
- *   - Desktop, no folder yet connected: same as mobile — ↓ Pull falls
- *     back to the file picker. Push is hidden because it has nowhere
+ *   - Mobile / Safari (File System Access API absent): only "↓ Get
+ *     latest" is shown, and it opens a file picker so the user can
+ *     grab the synced state file from the OneDrive app.
+ *   - Desktop, no folder yet connected: same as mobile — Get falls
+ *     back to the file picker. Send is hidden because it has nowhere
  *     to write.
- *   - Desktop with a connected folder: both ↓ Pull (reads the folder)
- *     and ↑ Push (writes the folder) are shown.
+ *   - Desktop with a connected folder: both "↓ Get latest" (reads the
+ *     folder) and "↑ Send updates" (writes the folder) are shown.
+ *
+ * Labels deliberately match the full Settings page sync section
+ * (Send / Get) instead of the older Push / Pull terminology — they
+ * say which way data is flowing without making the user memorize
+ * which direction "push" or "pull" means in this app.
  *
  * Status messages are shown inline next to the buttons and clear
  * themselves after a few seconds, so the header stays compact and
@@ -72,11 +77,11 @@ export default function SyncQuickActions() {
         `\nAny edits made on this device since the last sync will be lost.`,
     );
     if (!ok) {
-      setMsg('Pull cancelled.');
+      setMsg('Load cancelled.');
       return;
     }
     applySyncedState(payload);
-    setMsg(`Applied ${payload.projects.length} project(s) from ${source}.`);
+    setMsg(`Loaded ${payload.projects.length} project(s) from ${source}.`);
   }
 
   async function handlePullFromFolder() {
@@ -90,7 +95,7 @@ export default function SyncQuickActions() {
       }
       applyAfterConfirm(payload, 'connected folder');
     } catch (e) {
-      setMsg(`Pull failed: ${(e as Error).message}`);
+      setMsg(`Load failed: ${(e as Error).message}`);
     } finally {
       setBusy(null);
     }
@@ -103,7 +108,7 @@ export default function SyncQuickActions() {
       const payload = await pullFromFile(file);
       applyAfterConfirm(payload, file.name);
     } catch (e) {
-      setMsg(`Pull failed: ${(e as Error).message}`);
+      setMsg(`Load failed: ${(e as Error).message}`);
     } finally {
       setBusy(null);
     }
@@ -115,12 +120,12 @@ export default function SyncQuickActions() {
     try {
       const payload = await pushNow(filename);
       setMsg(
-        `Pushed ${payload.projects.length} project(s) at ${formatDateTime(
+        `Sent ${payload.projects.length} project(s) at ${formatDateTime(
           payload.syncedAt,
         )}.`,
       );
     } catch (e) {
-      setMsg(`Push failed: ${(e as Error).message}`);
+      setMsg(`Send failed: ${(e as Error).message}`);
     } finally {
       setBusy(null);
     }
@@ -143,11 +148,11 @@ export default function SyncQuickActions() {
         disabled={busy !== null}
         title={
           canFolderSync
-            ? 'Pull the latest synced state from the connected folder'
-            : 'Pick a sync file from your device (e.g. via OneDrive)'
+            ? 'Get the latest state another device sent — loads from the connected OneDrive folder.'
+            : 'Pick a snapshot file from your device picker (e.g. via the OneDrive app).'
         }
       >
-        {busy === 'pull' ? '↓ Pulling…' : '↓ Pull'}
+        {busy === 'pull' ? '↓ Loading…' : '↓ Get latest'}
       </button>
       {canFolderSync && (
         <button
@@ -155,9 +160,9 @@ export default function SyncQuickActions() {
           className="btn-ghost text-xs"
           onClick={handlePush}
           disabled={busy !== null}
-          title="Push the current state to the connected folder"
+          title="Send THIS device's current state to OneDrive so other devices can load the latest."
         >
-          {busy === 'push' ? '↑ Pushing…' : '↑ Push'}
+          {busy === 'push' ? '↑ Sending…' : '↑ Send updates'}
         </button>
       )}
       <input

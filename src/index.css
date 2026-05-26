@@ -21,19 +21,34 @@
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
            transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500
-           focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+           focus-visible:ring-offset-2 disabled:cursor-not-allowed
+           active:scale-[0.98] disabled:active:scale-100;
   }
+  /* Primary action: high contrast when enabled (colored fill + small
+     shadow that lifts on hover), unmistakably gray when disabled.
+     Earlier version used `opacity-50` on disabled, which kept the
+     brand-blue tint and made the button read as "a faded option" —
+     users couldn't tell at a glance whether they'd done the thing
+     to enable it (e.g. type into the textarea before "Post to Nuvolo").
+     Real gray-out + shadow-on-enabled removes that ambiguity. */
   .btn-primary {
-    @apply btn bg-brand-600 text-white hover:bg-brand-700 active:bg-brand-700;
+    @apply btn bg-brand-600 text-white shadow-sm
+           hover:bg-brand-700 hover:shadow-md
+           active:bg-brand-700
+           disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none;
   }
   .btn-secondary {
-    @apply btn bg-white text-slate-800 border border-slate-300 hover:bg-slate-50;
+    @apply btn bg-white text-slate-800 border border-slate-300 shadow-sm
+           hover:bg-slate-50 hover:shadow
+           disabled:opacity-50 disabled:shadow-none;
   }
   .btn-danger {
-    @apply btn bg-rose-600 text-white hover:bg-rose-700;
+    @apply btn bg-rose-600 text-white shadow-sm
+           hover:bg-rose-700 hover:shadow-md
+           disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none;
   }
   .btn-ghost {
-    @apply btn text-slate-600 hover:bg-slate-100;
+    @apply btn text-slate-600 hover:bg-slate-100 disabled:opacity-50;
   }
   .input {
     @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm
