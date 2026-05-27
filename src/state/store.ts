@@ -6,6 +6,7 @@ import type {
   Project,
   ProjectPhoto,
   ProjectStatus,
+  SavedVendor,
   Settings,
   Trade,
   Vendor,
@@ -36,6 +37,16 @@ interface AppState {
    * failing (e.g. browser revoked the folder permission).
    */
   syncError: string | null;
+
+  /**
+   * The user's persistent vendor "book" — independent of any specific
+   * workboard. Auto-populated when the user saves a vendor on a
+   * workboard via the "💾 Save to book" button, and surfaced as a
+   * "From book" picker the next time they add a vendor on any
+   * workboard. Synced across devices alongside projects/settings so
+   * saving on desktop = available on mobile.
+   */
+  savedVendors: SavedVendor[];
 
   /**
    * In-progress Compose Note text, keyed by project id. Lets the user
@@ -99,6 +110,20 @@ interface AppState {
   ) => void;
   removeVendor: (projectId: string, vendorId: string) => void;
 
+  // Saved vendor "book" — global, shared across all workboards.
+  /**
+   * Insert or update a saved vendor by `(name, company)` key. If a
+   * matching entry already exists, non-empty fields from `template`
+   * are merged into it (so you don't blow away an existing phone by
+   * saving the same vendor without one). Returns the resulting
+   * SavedVendor's id so the caller can stash it on the workboard
+   * Vendor that prompted the save (currently unused, reserved for
+   * future "this workboard vendor came from book entry X" linking).
+   */
+  addOrUpdateSavedVendor: (template: Omit<SavedVendor, 'id'>) => string;
+  /** Delete a saved vendor from the book by id. */
+  removeSavedVendor: (id: string) => void;
+
   // Settings
   setSettings: (patch: Partial<Settings>) => void;
 
@@ -110,7 +135,11 @@ interface AppState {
   setWorkOrders: (data: ImportedWorkOrders | null) => void;
 
   // Bulk import/export
-  replaceAll: (data: { projects: Project[]; settings: Settings }) => void;
+  replaceAll: (data: {
+    projects: Project[];
+    settings: Settings;
+    savedVendors?: SavedVendor[];
+  }) => void;
 
   /**
    * Apply a payload pulled from the cross-device sync file (see
@@ -124,6 +153,7 @@ interface AppState {
     projects: Project[];
     settings: Settings;
     workOrders: ImportedWorkOrders | null;
+    savedVendors?: SavedVendor[];
     syncedAt: string;
   }) => void;
 }
@@ -159,6 +189,7 @@ export const useStore = create<AppState>()(
       workOrders: null,
       lastSyncedAt: null,
       syncError: null,
+      savedVendors: [],
       composerDrafts: {},
 
       addProject: (p) =>
@@ -365,6 +396,71 @@ export const useStore = create<AppState>()(
           ),
         })),
 
+      addOrUpdateSavedVendor: (template) => {
+        // Dedupe by (name, company) — case-insensitive trim. Same name
+        // at different companies = different entry, on the assumption
+        // that "Mike at SullyMac" is genuinely a different person from
+        // "Mike at City Point" (or even if same person, the workboard
+        // contact context is different).
+        //
+        // When merging into an existing entry, only non-empty incoming
+        // fields overwrite existing ones — so saving the same vendor
+        // without filling in their phone doesn't blow away the phone
+        // number you already had on file.
+        const key = (n: string, c: string | undefined): string =>
+          `${(n || '').trim().toLowerCase()}|${(c || '').trim().toLowerCase()}`;
+        const incomingKey = key(template.name, template.company);
+        let resultId = '';
+        set((s) => {
+          const existingIdx = s.savedVendors.findIndex(
+            (sv) => key(sv.name, sv.company) === incomingKey,
+          );
+          if (existingIdx >= 0) {
+            const existing = s.savedVendors[existingIdx];
+            const merged: SavedVendor = {
+              ...existing,
+              // Take incoming non-empty fields; preserve existing otherwise.
+              ...(template.role?.trim() ? { role: template.role } : {}),
+              ...(template.phone?.trim() ? { phone: template.phone } : {}),
+              ...(template.email?.trim() ? { email: template.email } : {}),
+              ...(template.generalNotes?.trim()
+                ? { generalNotes: template.generalNotes }
+                : {}),
+              // name + company already match by key (modulo case/trim) —
+              // re-canonicalize to whatever the user just typed so updates
+              // to capitalization or whitespace flow through.
+              name: template.name.trim() || existing.name,
+              company: template.company?.trim() || existing.company,
+            };
+            resultId = existing.id;
+            const next = s.savedVendors.slice();
+            next[existingIdx] = merged;
+            return { savedVendors: next };
+          }
+          const created: SavedVendor = {
+            id: uid(),
+            name: template.name.trim(),
+            company: template.company?.trim() || undefined,
+            role: template.role?.trim() || undefined,
+            phone: template.phone?.trim() || undefined,
+            email: template.email?.trim() || undefined,
+            generalNotes: template.generalNotes?.trim() || undefined,
+          };
+          resultId = created.id;
+          return {
+            savedVendors: [...s.savedVendors, created].sort((a, b) =>
+              a.name.localeCompare(b.name),
+            ),
+          };
+        });
+        return resultId;
+      },
+
+      removeSavedVendor: (id) =>
+        set((s) => ({
+          savedVendors: s.savedVendors.filter((sv) => sv.id !== id),
+        })),
+
       setSettings: (patch) =>
         set((s) => ({ settings: { ...s.settings, ...patch } })),
 
@@ -389,6 +485,7 @@ export const useStore = create<AppState>()(
         set(() => ({
           projects: data.projects,
           settings: { ...defaultSettings, ...data.settings },
+          savedVendors: data.savedVendors ?? [],
         })),
 
       applySyncedState: (data) =>
@@ -396,6 +493,7 @@ export const useStore = create<AppState>()(
           projects: data.projects,
           settings: { ...defaultSettings, ...data.settings },
           workOrders: data.workOrders,
+          savedVendors: data.savedVendors ?? [],
           lastSyncedAt: data.syncedAt,
           syncError: null,
         })),
@@ -436,6 +534,10 @@ export const useStore = create<AppState>()(
           // on rehydrate and the very first setComposerDraft spreads
           // into `undefined`, blowing up.
           composerDrafts: p.composerDrafts ?? current.composerDrafts,
+          // Same defensive backfill for savedVendors — older persisted
+          // states don't have this key. Calling addOrUpdateSavedVendor
+          // before it's seeded would crash on `s.savedVendors.findIndex`.
+          savedVendors: p.savedVendors ?? current.savedVendors,
         };
       },
     },

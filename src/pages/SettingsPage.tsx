@@ -29,6 +29,8 @@ export default function SettingsPage() {
   const replaceAll = useStore((s) => s.replaceAll);
   const lastSyncedAt = useStore((s) => s.lastSyncedAt);
   const syncError = useStore((s) => s.syncError);
+  const savedVendors = useStore((s) => s.savedVendors);
+  const removeSavedVendor = useStore((s) => s.removeSavedVendor);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const syncFileRef = useRef<HTMLInputElement>(null);
@@ -43,7 +45,7 @@ export default function SettingsPage() {
   }, []);
 
   function exportBackup() {
-    const data = buildAppData(projects, settings);
+    const data = buildAppData(projects, settings, savedVendors);
     downloadJson(`mwpjm-backup-${new Date().toISOString().slice(0, 10)}.json`, data);
   }
 
@@ -51,10 +53,18 @@ export default function SettingsPage() {
     try {
       const data = await parseAppDataFile(file);
       const ok = window.confirm(
-        `Import ${data.projects.length} project(s)? This will REPLACE your current local data.`,
+        `Import ${data.projects.length} project(s)${
+          data.savedVendors?.length
+            ? ` and ${data.savedVendors.length} saved vendor(s)`
+            : ''
+        }? This will REPLACE your current local data.`,
       );
       if (!ok) return;
-      replaceAll({ projects: data.projects, settings: data.settings ?? settings });
+      replaceAll({
+        projects: data.projects,
+        settings: data.settings ?? settings,
+        savedVendors: data.savedVendors ?? [],
+      });
       setImportMsg(`Imported ${data.projects.length} project(s).`);
     } catch (e) {
       setImportMsg(`Import failed: ${(e as Error).message}`);
@@ -442,6 +452,76 @@ export default function SettingsPage() {
           <p className="text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded p-2">
             {syncMsg}
           </p>
+        )}
+      </section>
+
+      <section className="card p-4 space-y-3">
+        <div>
+          <h2 className="font-semibold">Vendor book</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Vendors you've saved from a workboard via the{' '}
+            <strong>💾 Save to book</strong> button. Picking one from
+            the "From book" dropdown when adding a vendor copies their
+            name, company, role, phone, email, and any general notes
+            into the new workboard vendor — visit-specific fields
+            (date, time, visit notes) stay blank for you to fill in.
+            Synced across devices alongside everything else.
+          </p>
+        </div>
+        {savedVendors.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            No saved vendors yet. The book auto-fills as you save
+            vendors from workboards.
+          </p>
+        ) : (
+          <ul className="divide-y divide-slate-200">
+            {savedVendors.map((sv) => (
+              <li
+                key={sv.id}
+                className="py-2 flex items-start justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <div className="font-medium truncate">
+                    {sv.name}
+                    {sv.company && (
+                      <span className="text-slate-500 font-normal">
+                        {' '}
+                        — {sv.company}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                    {sv.role && <span>{sv.role}</span>}
+                    {sv.phone && <span>{sv.phone}</span>}
+                    {sv.email && <span>{sv.email}</span>}
+                  </div>
+                  {sv.generalNotes && (
+                    <div className="text-xs text-slate-600 mt-1 italic">
+                      {sv.generalNotes}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="btn-ghost text-xs text-rose-600 shrink-0"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Remove "${sv.name}${
+                          sv.company ? ' — ' + sv.company : ''
+                        }" from your vendor book?\n\nWorkboards that already use this vendor are unaffected — only the book entry is removed.`,
+                      )
+                    ) {
+                      removeSavedVendor(sv.id);
+                    }
+                  }}
+                  title="Delete this entry from the vendor book. Existing workboard vendors using this entry's info are unaffected."
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
 
