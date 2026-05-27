@@ -7,22 +7,53 @@ import { PROJECT_STATUS_LABELS } from '../types';
 import { formatDateTime } from '../lib/format';
 import SyncQuickActions from '../components/SyncQuickActions';
 
+/**
+ * Workboards list page.
+ *
+ * Default view shows ACTIVE workboards only (anything where
+ * `archivedAt` is unset). A small "View archived (N) →" link at the
+ * bottom flips the list to archived-only mode so the user can
+ * unarchive items if needed without losing their position.
+ *
+ * The split exists because field-test feedback was that users
+ * deleted workboards once a job was done just to keep the list
+ * focused on what's currently in front of them — which threw away
+ * all the documentation we worked so hard to capture (photos,
+ * activity log, vendor coordination, FWKD linkage). Archive gives
+ * them the same "get it off my list" outcome without the data loss.
+ */
 export default function ProjectsPage() {
   const projects = useStore((s) => s.projects);
   const addProject = useStore((s) => s.addProject);
+  const unarchiveProject = useStore((s) => s.unarchiveProject);
   const navigate = useNavigate();
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState('');
   const [templateId, setTemplateId] = useState(TEMPLATES[0].id);
+  const [showArchived, setShowArchived] = useState(false);
 
-  const sorted = useMemo(
-    () =>
-      [...projects].sort(
-        (a, b) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-      ),
+  const archivedCount = useMemo(
+    () => projects.filter((p) => !!p.archivedAt).length,
     [projects],
   );
+
+  // Filter to either active (default) or archived (toggle) before
+  // sorting, so the rest of the render code is identical for both
+  // modes — just the button row at the top of each row differs.
+  const sorted = useMemo(() => {
+    const filtered = projects.filter((p) =>
+      showArchived ? !!p.archivedAt : !p.archivedAt,
+    );
+    return filtered.sort(
+      (a, b) =>
+        // Archived list sorts by archive time (most recently archived
+        // first); active list sorts by updatedAt as before.
+        showArchived
+          ? (b.archivedAt ?? 0) - (a.archivedAt ?? 0)
+          : new Date(b.updatedAt).getTime() -
+            new Date(a.updatedAt).getTime(),
+    );
+  }, [projects, showArchived]);
 
   function createProject() {
     const name = newName.trim();
@@ -52,10 +83,30 @@ export default function ProjectsPage() {
     navigate(`/projects/${proj.id}`);
   }
 
+  /**
+   * One-tap unarchive from the archived list. Doesn't navigate —
+   * the row just disappears from the archived view (since it's no
+   * longer archived). User can flip back to active to see it.
+   */
+  function handleUnarchive(e: React.MouseEvent, projectId: string) {
+    // The row is a <Link>, so stop the click from also navigating
+    // into the workboard page when the unarchive button is tapped.
+    e.preventDefault();
+    e.stopPropagation();
+    unarchiveProject(projectId);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="text-xl font-semibold">Workboards</h1>
+        <h1 className="text-xl font-semibold">
+          Workboards
+          {showArchived && (
+            <span className="ml-2 text-sm font-normal text-slate-500">
+              · Archived
+            </span>
+          )}
+        </h1>
         <div className="flex items-center gap-2 flex-wrap">
           {/* Quick sync controls so the user doesn't have to hop into
               Settings just to pull the latest state from the desktop or
@@ -126,17 +177,29 @@ export default function ProjectsPage() {
 
       {sorted.length === 0 ? (
         <div className="card p-8 text-center text-slate-500">
-          <p className="mb-2">Nothing tracked yet.</p>
-          <p className="text-sm">
-            Tap <strong>📝 Quick Workboard</strong> to drop straight into a
-            blank one (great for on-call), or{' '}
-            <strong>+ New Workboard</strong> to start from a template. You can
-            also jump to the{' '}
-            <Link to="/dashboard" className="text-brand-600 hover:underline">
-              Dashboard
-            </Link>{' '}
-            and pick a row to spin up a quick follow-up.
-          </p>
+          {showArchived ? (
+            <>
+              <p className="mb-2">No archived workboards.</p>
+              <p className="text-sm">
+                Archive a finished workboard from its page to clean up
+                your active list without losing the documentation.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="mb-2">Nothing tracked yet.</p>
+              <p className="text-sm">
+                Tap <strong>📝 Quick Workboard</strong> to drop straight into
+                a blank one (great for on-call), or{' '}
+                <strong>+ New Workboard</strong> to start from a template. You
+                can also jump to the{' '}
+                <Link to="/dashboard" className="text-brand-600 hover:underline">
+                  Dashboard
+                </Link>{' '}
+                and pick a row to spin up a quick follow-up.
+              </p>
+            </>
+          )}
         </div>
       ) : (
         <ul className="space-y-2">
@@ -144,7 +207,9 @@ export default function ProjectsPage() {
             <li key={p.id}>
               <Link
                 to={`/projects/${p.id}`}
-                className="block card p-4 hover:border-brand-500 hover:shadow transition"
+                className={`block card p-4 hover:border-brand-500 hover:shadow transition ${
+                  showArchived ? 'opacity-80' : ''
+                }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -156,12 +221,30 @@ export default function ProjectsPage() {
                         <span className="text-amber-700">WO: not linked</span>
                       )}
                       {p.location && <span>{p.location}</span>}
-                      <span>Updated {formatDateTime(p.updatedAt)}</span>
+                      <span>
+                        {showArchived && p.archivedAt
+                          ? `Archived ${formatDateTime(
+                              new Date(p.archivedAt).toISOString(),
+                            )}`
+                          : `Updated ${formatDateTime(p.updatedAt)}`}
+                      </span>
                     </div>
                   </div>
-                  <span className="pill bg-slate-100 text-slate-700 shrink-0">
-                    {PROJECT_STATUS_LABELS[p.status]}
-                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="pill bg-slate-100 text-slate-700">
+                      {PROJECT_STATUS_LABELS[p.status]}
+                    </span>
+                    {showArchived && (
+                      <button
+                        type="button"
+                        className="btn-secondary text-xs"
+                        onClick={(e) => handleUnarchive(e, p.id)}
+                        title="Restore this workboard to your active list"
+                      >
+                        ↩ Unarchive
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="mt-3 flex items-center gap-3 text-xs text-slate-500">
                   <span>
@@ -178,6 +261,31 @@ export default function ProjectsPage() {
           ))}
         </ul>
       )}
+
+      {/* View toggle — small footer link rather than a tab/button row,
+          so it doesn't compete visually with the active list. The
+          archived-count link only appears when there are archived items
+          (and we're not already viewing them). */}
+      <div className="pt-2 text-center">
+        {!showArchived && archivedCount > 0 && (
+          <button
+            type="button"
+            className="text-sm text-slate-500 hover:text-slate-700 hover:underline"
+            onClick={() => setShowArchived(true)}
+          >
+            📦 View archived ({archivedCount}) →
+          </button>
+        )}
+        {showArchived && (
+          <button
+            type="button"
+            className="text-sm text-brand-600 hover:underline"
+            onClick={() => setShowArchived(false)}
+          >
+            ← Active workboards
+          </button>
+        )}
+      </div>
     </div>
   );
 }

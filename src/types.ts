@@ -108,6 +108,24 @@ export interface Project {
    * field default to false (full layout) so we don't break anything.
    */
   simple?: boolean;
+  /**
+   * Epoch milliseconds the workboard was archived. Absence (undefined
+   * / missing field) means the workboard is active and shows on the
+   * default Workboards list. When set, the workboard is hidden from
+   * the default list but still accessible via the "View archived"
+   * toggle, can be opened normally, and is fully recoverable via
+   * Unarchive — all photos, activity, vendors, and FWKD linkage are
+   * preserved.
+   *
+   * Archive is intentionally a separate, lighter-weight action than
+   * the existing destructive Delete. Field-test feedback was that
+   * users were deleting workboards once a job was done in order to
+   * keep the list relevant, which threw away the documentation. With
+   * archive available, Delete becomes the rare "this was a test /
+   * I created it by accident" path, and Archive is the routine
+   * "this job is closed, get it off my main list" path.
+   */
+  archivedAt?: number;
 }
 
 export interface Settings {

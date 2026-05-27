@@ -55,6 +55,17 @@ interface AppState {
   addProject: (p: Project) => void;
   updateProject: (id: string, patch: Partial<Project>) => void;
   deleteProject: (id: string) => void;
+  /**
+   * Mark a workboard as archived. Hides it from the default Workboards
+   * list but preserves all data (photos, activity, vendors, FWKD
+   * linkage). Archive does NOT bump `updatedAt` on purpose — when the
+   * user later unarchives, the workboard's "real" last-touched time
+   * is still meaningful and the sort order isn't artificially
+   * jostled by the archive event itself.
+   */
+  archiveProject: (id: string) => void;
+  /** Undo `archiveProject` — clears `archivedAt`, restores to active list. */
+  unarchiveProject: (id: string) => void;
 
   // Trades
   addTrade: (projectId: string, t: Omit<Trade, 'id'>) => void;
@@ -175,6 +186,20 @@ export const useStore = create<AppState>()(
           };
         });
       },
+
+      archiveProject: (id) =>
+        set((s) => ({
+          projects: s.projects.map((p) =>
+            p.id === id ? { ...p, archivedAt: Date.now() } : p,
+          ),
+        })),
+
+      unarchiveProject: (id) =>
+        set((s) => ({
+          projects: s.projects.map((p) =>
+            p.id === id ? { ...p, archivedAt: undefined } : p,
+          ),
+        })),
 
       addTrade: (projectId, t) =>
         set((s) => ({
