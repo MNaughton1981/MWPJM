@@ -68,6 +68,43 @@ export interface Vendor {
 }
 
 /**
+ * A vendor template stored in the global "vendor book" — independent
+ * of any specific project. Lets users build up a contact list of the
+ * vendors / companies they work with repeatedly (City Point, SullyMac,
+ * Joe Warren & Sons, etc.) so they're not re-typing names, phones,
+ * and emails every time a vendor is added to a workboard.
+ *
+ * Saved separately from `Vendor` because saved entries don't have
+ * visit-specific fields (visitDate, visitTime, notes — those vary
+ * per workboard). When a saved vendor is added to a workboard, the
+ * template fields (name, company, role, phone, email, generalNotes)
+ * are copied; the visit fields are left blank for the user to fill
+ * in for that specific visit.
+ *
+ * Dedupe key when saving from a workboard: `lower(trim(name)) | lower(trim(company))`.
+ * Same name with different companies = different entry (e.g. "Mike"
+ * at SullyMac vs. "Mike" at City Point). Same name + same company
+ * updates the existing entry.
+ */
+export interface SavedVendor {
+  id: string;
+  name: string;
+  company?: string;
+  role?: string;
+  phone?: string;
+  email?: string;
+  /**
+   * Persistent notes about working with this vendor — distinct from
+   * the per-visit `notes` on a workboard Vendor. Things like "Always
+   * call ahead", "Prefers afterhours", "Has master key — no FOB
+   * needed". Pre-fills a workboard vendor's notes field when the
+   * saved entry is selected, where the user can append visit-specific
+   * details on top.
+   */
+  generalNotes?: string;
+}
+
+/**
  * Photo metadata. Binary data is stored separately in IndexedDB
  * (see src/lib/photoStorage.ts) keyed by `${projectId}/${photoId}`.
  */
@@ -166,6 +203,11 @@ export interface AppData {
   exportedAt: string;
   projects: Project[];
   settings: Settings;
+  /**
+   * Optional in the AppData JSON — older backups predate the vendor
+   * book feature. Importers should default to `[]` when missing.
+   */
+  savedVendors?: SavedVendor[];
 }
 
 export const TRADE_LABELS: Record<TradeKey, string> = {

@@ -24,7 +24,7 @@ import {
   readFileFromFolder,
   writeFileToFolder,
 } from './folderConnection';
-import type { Project, Settings } from '../types';
+import type { Project, SavedVendor, Settings } from '../types';
 import type { ImportedWorkOrders } from './workOrderCsv';
 
 export const DEFAULT_SYNC_FILENAME = 'mwpjm-state.json';
@@ -42,6 +42,13 @@ export interface SyncPayload {
   /** Most recent CSV import — included so the mobile dashboard sees
    *  the same Work Orders the desktop just refreshed. */
   workOrders: ImportedWorkOrders | null;
+  /**
+   * The user's vendor "book" — global, not per-project. Synced so
+   * saving a vendor on desktop makes it pickable on mobile next
+   * time the user adds one. Optional field for backwards-compat
+   * with snapshots written before the vendor book existed.
+   */
+  savedVendors?: SavedVendor[];
 }
 
 function buildPayload(): SyncPayload {
@@ -52,6 +59,7 @@ function buildPayload(): SyncPayload {
     projects: state.projects,
     settings: state.settings,
     workOrders: state.workOrders,
+    savedVendors: state.savedVendors,
   };
 }
 
@@ -83,6 +91,7 @@ export function parseSyncPayload(text: string): SyncPayload {
     projects: p.projects,
     settings: p.settings as Settings,
     workOrders: (p.workOrders as ImportedWorkOrders | null) ?? null,
+    savedVendors: Array.isArray(p.savedVendors) ? p.savedVendors : [],
   };
 }
 
@@ -146,6 +155,7 @@ export function applySyncedState(payload: SyncPayload): void {
     projects: payload.projects,
     settings: payload.settings,
     workOrders: payload.workOrders,
+    savedVendors: payload.savedVendors ?? [],
     syncedAt: payload.syncedAt,
   });
 }
@@ -186,7 +196,8 @@ export function startAutoSync(
     const persistedSliceUnchanged =
       state.projects === prev.projects &&
       state.settings === prev.settings &&
-      state.workOrders === prev.workOrders;
+      state.workOrders === prev.workOrders &&
+      state.savedVendors === prev.savedVendors;
     if (persistedSliceUnchanged) return;
 
     if (timer !== null) window.clearTimeout(timer);

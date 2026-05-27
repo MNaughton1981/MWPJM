@@ -1,4 +1,4 @@
-import type { AppData, Project, Settings } from '../types';
+import type { AppData, Project, SavedVendor, Settings } from '../types';
 import {
   PROJECT_STATUS_LABELS,
   STATUS_LABELS,
@@ -9,12 +9,14 @@ import { formatDate, formatDateTime } from './format';
 export function buildAppData(
   projects: Project[],
   settings: Settings,
+  savedVendors: SavedVendor[] = [],
 ): AppData {
   return {
     version: 1,
     exportedAt: new Date().toISOString(),
     projects,
     settings,
+    savedVendors,
   };
 }
 
