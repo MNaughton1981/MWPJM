@@ -214,3 +214,135 @@ export function stopAutoSync(): void {
     stopFn = null;
   }
 }
+
+// ---------- Smart "Refresh" — one button does the right thing ----------
+//
+// The dual Send / Get buttons made users think about direction every
+// time. Most of the time the user just wants their devices to be in
+// sync — they don't care which way data flowed last. `refreshFromFolder`
+// collapses that into a single "do the right thing" action:
+//
+//   1. Read the sync file from the connected folder.
+//   2. If the file is newer than this device's last sync, apply it.
+//   3. Else if this device has un-synced local changes, push them.
+//   4. Else: no-op, return 'already-current'.
+//
+// Used by SyncQuickActions on the Workboards page header. The same
+// function powers auto-pull-on-mount (with `direction: 'pull-only'`
+// to skip step 3) so users opening the Workboards page on a device
+// that's been idle automatically see the latest state from the
+// device they were last on.
+
+/**
+ * Crude "do we have unpushed edits?" detector. Compares the most
+ * recent project `updatedAt` against `lastSyncedAt`. If any project
+ * was touched after the last sync, there's something to push.
+ *
+ * Doesn't catch every case (e.g. settings-only edits don't bump any
+ * project's updatedAt), but in practice the pattern is "user edits a
+ * workboard, then opens the other device" so this is enough.
+ */
+export function hasLocalChanges(): boolean {
+  const state = useStore.getState();
+  if (!state.lastSyncedAt) return state.projects.length > 0;
+  const lastSyncMs = new Date(state.lastSyncedAt).getTime();
+  for (const p of state.projects) {
+    if (new Date(p.updatedAt).getTime() > lastSyncMs) return true;
+  }
+  return false;
+}
+
+export type RefreshStatus =
+  /** No folder connected (or browser doesn't support the folder API). */
+  | { kind: 'no-folder' }
+  /** Folder connected, but no sync file there yet. Pull was a no-op. */
+  | { kind: 'no-file' }
+  /** Already at parity with the file. Nothing changed. */
+  | { kind: 'already-current' }
+  /** File was newer than us — applied. */
+  | { kind: 'applied'; projectsCount: number; syncedAt: string }
+  /** We were newer (and had local changes) — pushed. */
+  | { kind: 'pushed'; projectsCount: number; syncedAt: string }
+  /** Refresh hit an error. */
+  | { kind: 'error'; message: string };
+
+/**
+ * One-button sync. See header comment above for the algorithm.
+ *
+ * `direction` controls whether the function may push:
+ *   - 'pull-and-push' (manual Refresh button): full algorithm.
+ *   - 'pull-only' (auto-pull on page mount): skips the push step.
+ *     The reasoning: on auto-pull we don't want a passive page open
+ *     to silently overwrite the file. Pushing is reserved for
+ *     explicit user actions (manual Refresh) or auto-sync's
+ *     edit-driven debounce.
+ */
+export async function refreshFromFolder(
+  filename: string = DEFAULT_SYNC_FILENAME,
+  direction: 'pull-only' | 'pull-and-push' = 'pull-and-push',
+): Promise<RefreshStatus> {
+  if (!isFolderApiSupported()) return { kind: 'no-folder' };
+
+  let payload: SyncPayload | null;
+  try {
+    payload = await pullFromFolder(filename);
+  } catch (e) {
+    return { kind: 'error', message: (e as Error).message };
+  }
+
+  const state = useStore.getState();
+  const localLastSync = state.lastSyncedAt;
+  const localSyncedMs = localLastSync
+    ? new Date(localLastSync).getTime()
+    : 0;
+
+  // No file exists yet. If we have data and pushing is allowed, write
+  // it so the file gets created. Otherwise no-op.
+  if (!payload) {
+    if (direction === 'pull-and-push' && state.projects.length > 0) {
+      try {
+        const pushed = await pushNow(filename);
+        return {
+          kind: 'pushed',
+          projectsCount: pushed.projects.length,
+          syncedAt: pushed.syncedAt,
+        };
+      } catch (e) {
+        return { kind: 'error', message: (e as Error).message };
+      }
+    }
+    return { kind: 'no-file' };
+  }
+
+  const fileSyncedMs = new Date(payload.syncedAt).getTime();
+
+  // File is newer than us — apply.
+  if (fileSyncedMs > localSyncedMs) {
+    applySyncedState(payload);
+    return {
+      kind: 'applied',
+      projectsCount: payload.projects.length,
+      syncedAt: payload.syncedAt,
+    };
+  }
+
+  // We're newer (or tied) — push if we have local changes.
+  if (
+    direction === 'pull-and-push' &&
+    fileSyncedMs <= localSyncedMs &&
+    hasLocalChanges()
+  ) {
+    try {
+      const pushed = await pushNow(filename);
+      return {
+        kind: 'pushed',
+        projectsCount: pushed.projects.length,
+        syncedAt: pushed.syncedAt,
+      };
+    } catch (e) {
+      return { kind: 'error', message: (e as Error).message };
+    }
+  }
+
+  return { kind: 'already-current' };
+}
