@@ -5,6 +5,7 @@ import {
   buildSecurityNotification,
   type SecurityNotificationArgs,
 } from '../lib/security';
+import { isValidWorkOrderId } from '../lib/nuvolo';
 
 interface Props {
   project: Project;
@@ -31,6 +32,7 @@ export default function VendorsSection({ project }: Props) {
   // for users whose localStorage was persisted before this field existed
   // (the persist `merge` in store.ts now backfills it, but stay defensive).
   const securityConfigured = !!settings.securityEmail?.trim();
+  const woValid = isValidWorkOrderId(project.workOrderId);
 
   function add() {
     addVendor(project.id, {
@@ -46,7 +48,7 @@ export default function VendorsSection({ project }: Props) {
     setShowAdd(false);
   }
 
-  function notifySecurity(vendor: Vendor) {
+  function notifySecurity(vendor: Vendor, alsoPostToNuvolo: boolean) {
     if (!securityConfigured) return;
     if (!vendor.name.trim()) {
       window.alert('Add the vendor name first.');
@@ -63,6 +65,8 @@ export default function VendorsSection({ project }: Props) {
       ccEmail: settings.securityCcSelf ? settings.userEmail : undefined,
       preamble: settings.securityPreamble,
       technicianName: settings.technicianName,
+      alsoPostToNuvolo,
+      nuvoloEmail: settings.nuvoloEmail,
     };
     const mail = buildSecurityNotification(args);
     window.location.href = mail.href;
@@ -93,8 +97,10 @@ export default function VendorsSection({ project }: Props) {
               vendor={v}
               onChange={(patch) => updateVendor(project.id, v.id, patch)}
               onRemove={() => removeVendor(project.id, v.id)}
-              onNotifySecurity={() => notifySecurity(v)}
+              onNotifySecurity={(alsoNuvolo) => notifySecurity(v, alsoNuvolo)}
               securityConfigured={securityConfigured}
+              hasValidWorkOrder={woValid}
+              workOrderId={project.workOrderId}
             />
           ))}
         </ul>
@@ -116,13 +122,20 @@ function VendorCard({
   onRemove,
   onNotifySecurity,
   securityConfigured,
+  hasValidWorkOrder,
+  workOrderId,
 }: {
   vendor: Vendor;
   onChange: (patch: Partial<Vendor>) => void;
   onRemove: () => void;
-  onNotifySecurity: () => void;
+  onNotifySecurity: (alsoPostToNuvolo: boolean) => void;
   securityConfigured: boolean;
+  hasValidWorkOrder: boolean;
+  workOrderId?: string;
 }) {
+  // Per-card state: defaults to ON when a valid WO ID exists.
+  const [alsoNuvolo, setAlsoNuvolo] = useState(hasValidWorkOrder);
+
   return (
     <li className="border border-slate-200 rounded-lg p-3 space-y-2">
       <div className="flex items-center justify-between gap-2">
@@ -216,16 +229,33 @@ function VendorCard({
         />
       </div>
 
-      <div className="flex justify-end pt-1">
+      <div className="flex items-center justify-between gap-2 pt-1 flex-wrap">
+        {/* "Also post to Nuvolo" opt-in — only shown when the workboard
+            has a valid FWKD ID. Checked by default so the common case
+            (tied to a work order) works in one tap. Uncheck for the
+            "covering for Dave on a landscape ticket I don't own" case. */}
+        {hasValidWorkOrder && (
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            <input
+              type="checkbox"
+              checked={alsoNuvolo}
+              onChange={(e) => setAlsoNuvolo(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+            />
+            Also post to Nuvolo ({workOrderId})
+          </label>
+        )}
         <button
-          className="btn-secondary text-xs"
-          onClick={onNotifySecurity}
+          className="btn-secondary text-xs ml-auto"
+          onClick={() => onNotifySecurity(alsoNuvolo && hasValidWorkOrder)}
           disabled={!securityConfigured || !vendor.name.trim()}
           title={
             !securityConfigured
               ? 'Set the security team email in Settings first.'
               : !vendor.name.trim()
               ? 'Add the vendor name first.'
+              : alsoNuvolo && hasValidWorkOrder
+              ? `Open mail to security + Nuvolo (${workOrderId}) with visit details`
               : 'Open mail with a structured visit notice for the security team'
           }
         >

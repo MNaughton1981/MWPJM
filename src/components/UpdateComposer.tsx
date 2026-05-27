@@ -14,7 +14,28 @@ import {
   shareNote,
 } from '../lib/destinations';
 import { loadProjectPhotoFiles } from '../lib/photoStorage';
+import { compressPhotos, formatBytes } from '../lib/photoCompress';
 import { formatStamp } from '../lib/format';
+
+/** Typical email server attachment cap (Outlook / Gmail). */
+const EMAIL_MAX_BYTES = 25 * 1024 * 1024; // 25 MB
+
+/**
+ * Open a mailto: link reliably across desktop browsers, installed PWAs,
+ * and mobile Chrome. `window.location.href = mailto:` silently fails in
+ * some installed-PWA contexts on Android Chrome. A synthesized <a> click
+ * is the most portable fallback.
+ */
+function openMailto(href: string): void {
+  const a = document.createElement('a');
+  a.href = href;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  // Cleanup after a short delay — removal is cosmetic, not functional.
+  setTimeout(() => document.body.removeChild(a), 200);
+}
 
 interface Props {
   project: Project;
@@ -105,69 +126,142 @@ export default function UpdateComposer({ project }: Props) {
     postToNuvoloAsync();
   }
 
+  // --- Photo batch state (for the "over budget" modal) ---
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [sendingPhotos, setSendingPhotos] = useState(false);
+
+  /** Estimated raw photo size (sum of original blobs). Updated when
+   *  photos change — used for the budget indicator and the batch
+   *  decision. Stored as a rough estimate from metadata; the real
+   *  compressed size is computed on-demand during send. */
+  const photoSizeEstimate = useMemo(() => {
+    const photos = project.photos ?? [];
+    return photos.reduce((sum, p) => sum + (p.size || 0), 0);
+  }, [project.photos]);
+
+  const photoCount = (project.photos ?? []).length;
+
   async function postToNuvoloAsync() {
     if (!nuvoloMail) return;
 
-    const hasPhotos = (project.photos ?? []).length > 0;
+    const hasPhotos = photoCount > 0;
 
-    // On mobile with photos: use navigator.share to attach photos to the
-    // email. The system share sheet opens with photos attached + subject/body
-    // pre-filled. User picks their mail app and hits Send.
-    if (isMobile && hasPhotos) {
-      try {
-        const files = await loadProjectPhotoFiles(project.id, project.photos ?? []);
-        if (files.length > 0) {
+    // If photos exist and estimated size exceeds the email cap, show
+    // the batch modal instead of trying to send everything at once.
+    if (hasPhotos && isMobile && photoSizeEstimate > EMAIL_MAX_BYTES) {
+      setShowBatchModal(true);
+      return;
+    }
+
+    // Normal path — compress + share (mobile) or mailto (desktop).
+    await sendWithPhotos('all');
+  }
+
+  /**
+   * Core send logic. `mode` controls how many photos to attach:
+   *   - 'all': compress all photos and share
+   *   - 'batch': compress photos up to EMAIL_MAX_BYTES
+   *   - 'none': open mailto with a body note about photos
+   */
+  async function sendWithPhotos(mode: 'all' | 'batch' | 'none') {
+    if (!nuvoloMail) return;
+    setShowBatchModal(false);
+    setSendingPhotos(true);
+
+    const hasPhotos = photoCount > 0;
+
+    try {
+      // On mobile with photos: compress + share via system sheet.
+      if (isMobile && hasPhotos && mode !== 'none') {
+        const rawFiles = await loadProjectPhotoFiles(
+          project.id,
+          project.photos ?? [],
+        );
+        // Compress all — typically drops 4 MB photos to ~800 KB each.
+        const compressed = await compressPhotos(rawFiles);
+
+        // If mode is 'batch', pick the first N that fit under the cap.
+        let filesToSend = compressed;
+        if (mode === 'batch') {
+          filesToSend = [];
+          let running = 0;
+          for (const f of compressed) {
+            if (running + f.size > EMAIL_MAX_BYTES) break;
+            filesToSend.push(f);
+            running += f.size;
+          }
+          // Always send at least one photo even if it alone exceeds cap.
+          if (filesToSend.length === 0 && compressed.length > 0) {
+            filesToSend = [compressed[0]];
+          }
+        }
+
+        if (filesToSend.length > 0) {
           const nav = navigator as Navigator & {
             canShare?: (data: { files?: File[] }) => boolean;
-            share?: (data: { files?: File[]; title?: string; text?: string }) => Promise<void>;
+            share?: (data: {
+              files?: File[];
+              title?: string;
+              text?: string;
+            }) => Promise<void>;
           };
-          if (nav.share && nav.canShare && nav.canShare({ files })) {
+          if (
+            nav.share &&
+            nav.canShare &&
+            nav.canShare({ files: filesToSend })
+          ) {
             const shareText =
               `To: ${nuvoloMail.to}\n` +
               `Subject: ${nuvoloMail.subject}\n\n` +
               nuvoloMail.body;
-            await nav.share({
-              files,
-              title: nuvoloMail.subject,
-              text: shareText,
-            });
-            logActivity({ postedToNuvolo: true });
-            clearDraft();
-            setToast({
-              kind: 'ok',
-              text: `Shared with ${files.length} photo(s) — send from your mail app.`,
-            });
-            return;
+            try {
+              await nav.share({
+                files: filesToSend,
+                title: nuvoloMail.subject,
+                text: shareText,
+              });
+              logActivity({ postedToNuvolo: true });
+              clearDraft();
+              const remaining = photoCount - filesToSend.length;
+              const suffix =
+                remaining > 0
+                  ? ` (${remaining} more photo(s) not included — send in a follow-up)`
+                  : '';
+              setToast({
+                kind: 'ok',
+                text: `Shared ${filesToSend.length} photo(s) — send from your mail app.${suffix}`,
+              });
+              return;
+            } catch (e) {
+              if ((e as { name?: string }).name === 'AbortError') {
+                setToast({ kind: 'err', text: 'Share cancelled — not posted.' });
+                return;
+              }
+              // Fall through to mailto: on any other share error.
+            }
           }
         }
-      } catch (e) {
-        if ((e as { name?: string }).name === 'AbortError') {
-          // User cancelled share sheet — don't log activity
-          setToast({ kind: 'err', text: 'Share cancelled — not posted.' });
-          return;
-        }
-        // Fall through to mailto: if share fails for any other reason
+        // If share API couldn't handle it, fall through to mailto.
       }
-    }
 
-    // Desktop path (or mobile without photos / share not supported):
-    // use mailto: link. If there are photos, mention them in the body.
-    logActivity({ postedToNuvolo: true });
-    if (hasPhotos && !isMobile) {
-      // Append a note about photos to the mailto body so the user remembers
-      // to attach them via the Nuvolo upload UI
-      const photoCount = (project.photos ?? []).length;
-      const photoNote = `\n\n[${photoCount} photo(s) captured in MWPJM — attach via Nuvolo or download from the app]`;
-      const enhancedBody = nuvoloMail.body + photoNote;
-      const href =
-        `mailto:${encodeURIComponent(nuvoloMail.to)}` +
-        `?subject=${encodeURIComponent(nuvoloMail.subject)}` +
-        `&body=${encodeURIComponent(enhancedBody)}`;
-      window.location.href = href;
-    } else {
-      window.location.href = nuvoloMail.href;
+      // Desktop path (or mobile share unavailable / mode = 'none'):
+      // open mailto with a note about photos in the body.
+      logActivity({ postedToNuvolo: true });
+      if (hasPhotos) {
+        const photoNote = `\n\n[${photoCount} photo(s) captured in Workboard — attach via Nuvolo or download from the app]`;
+        const enhancedBody = nuvoloMail.body + photoNote;
+        const href =
+          `mailto:${encodeURIComponent(nuvoloMail.to)}` +
+          `?subject=${encodeURIComponent(nuvoloMail.subject)}` +
+          `&body=${encodeURIComponent(enhancedBody)}`;
+        openMailto(href);
+      } else {
+        openMailto(nuvoloMail.href);
+      }
+      clearDraft();
+    } finally {
+      setSendingPhotos(false);
     }
-    clearDraft();
   }
 
   function logOnly() {
@@ -196,7 +290,7 @@ export default function UpdateComposer({ project }: Props) {
       technicianName: settings.technicianName,
     });
     logActivity({ postedToNuvolo: false });
-    window.location.href = mail.href;
+    openMailto(mail.href);
     clearDraft();
   }
 
@@ -428,26 +522,100 @@ export default function UpdateComposer({ project }: Props) {
         </div>
       )}
 
+      {/* Photo size budget indicator — shows when photos exist so the
+          user has a visual sense of whether their payload will fit in
+          one email. Hidden when there are no photos. */}
+      {photoCount > 0 && (
+        <div className="text-xs text-slate-600 flex items-center gap-2 flex-wrap">
+          <span>
+            📷 {photoCount} photo{photoCount !== 1 ? 's' : ''} ·{' '}
+            <span
+              className={
+                photoSizeEstimate > EMAIL_MAX_BYTES
+                  ? 'text-amber-700 font-medium'
+                  : ''
+              }
+            >
+              ~{formatBytes(photoSizeEstimate)} raw
+            </span>
+            {photoSizeEstimate > EMAIL_MAX_BYTES && (
+              <span className="text-amber-700">
+                {' '}
+                (over ~25 MB email cap — will auto-compress or batch)
+              </span>
+            )}
+          </span>
+        </div>
+      )}
+
+      {/* Batch modal — shown when user hits Post with too many photos */}
+      {showBatchModal && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+          <div className="font-semibold text-sm text-amber-900">
+            Photos exceed email limit (~25 MB)
+          </div>
+          <p className="text-xs text-amber-800">
+            You have {photoCount} photos (~{formatBytes(photoSizeEstimate)} raw).
+            After compression they'll be smaller, but may still exceed the cap.
+            Choose how to proceed:
+          </p>
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              className="btn-primary text-xs"
+              onClick={() => sendWithPhotos('batch')}
+              disabled={sendingPhotos}
+            >
+              {sendingPhotos
+                ? 'Compressing…'
+                : `Send first batch that fits (~25 MB) →`}
+            </button>
+            <button
+              type="button"
+              className="btn-secondary text-xs"
+              onClick={() => sendWithPhotos('none')}
+              disabled={sendingPhotos}
+            >
+              Send email without attachments (note photo count in body)
+            </button>
+            <button
+              type="button"
+              className="btn-ghost text-xs"
+              onClick={() => setShowBatchModal(false)}
+              disabled={sendingPhotos}
+            >
+              Cancel
+            </button>
+          </div>
+          <p className="text-[11px] text-amber-700">
+            Tip: you can always send remaining photos in a follow-up post
+            — each one adds another note to the same FWKD work order.
+          </p>
+        </div>
+      )}
+
       {/* Action buttons */}
       <div className="border-t pt-3 space-y-2">
         <div className="flex flex-col sm:flex-row gap-2 sm:justify-end">
           <button
             className="btn-primary"
             onClick={postToNuvolo}
-            disabled={!nuvoloMail}
+            disabled={!nuvoloMail || sendingPhotos}
             title={
               !woValid
                 ? 'Set a valid Work Order ID first'
                 : !hasText
                 ? 'Type your update first'
-                : isMobile && (project.photos ?? []).length > 0
-                ? `Share update + ${(project.photos ?? []).length} photo(s) via mail app`
+                : isMobile && photoCount > 0
+                ? `Share update + ${photoCount} photo(s) via mail app`
                 : 'Open mail client and log activity'
             }
           >
-            {isMobile && (project.photos ?? []).length > 0
-              ? `Post to Nuvolo + ${(project.photos ?? []).length} photo(s) →`
-              : 'Post to Nuvolo →'}
+            {sendingPhotos
+              ? 'Compressing photos…'
+              : isMobile && photoCount > 0
+                ? `Post to Nuvolo + ${photoCount} photo(s) →`
+                : 'Post to Nuvolo →'}
           </button>
         </div>
         <div className="flex flex-wrap gap-2 justify-end">

@@ -8,6 +8,21 @@ export interface SecurityNotificationArgs {
   ccEmail?: string;
   preamble?: string;
   technicianName?: string;
+  /**
+   * When true AND project.workOrderId is a valid FWKD ID, the
+   * notification email also routes to Nuvolo:
+   *   - To: becomes "securityEmail; nuvoloEmail" (both as primary
+   *     recipients, satisfying ServiceNow's inbound-action condition).
+   *   - Subject gets prefixed with "RE: FWKD####### — " so the
+   *     inbound action matches it to the work order and posts the
+   *     body as a WO note.
+   * This lets a single email serve double duty: security gets their
+   * badge-prep notice AND the work order gets a timestamped record
+   * that the vendor was notified. Opt-out (unchecked) when the user
+   * is sending a notification unrelated to their own work order.
+   */
+  alsoPostToNuvolo?: boolean;
+  nuvoloEmail?: string;
 }
 
 export interface SecurityMail {
@@ -49,7 +64,16 @@ export function buildSecurityNotification(
     : 'TBD';
 
   const companySuffix = args.vendor.company ? ` (${args.vendor.company})` : '';
-  const subject = `Vendor visit notice: ${args.vendor.name}${companySuffix} — ${visitDate}`;
+
+  // When routing to Nuvolo, prefix subject with "RE: FWKD#######" so
+  // ServiceNow's inbound action matches the email to the work order.
+  const woId = args.project.workOrderId?.trim().toUpperCase() ?? '';
+  const postToNuvolo =
+    args.alsoPostToNuvolo && /^FWKD\d+$/i.test(woId);
+
+  const subject = postToNuvolo
+    ? `RE: ${woId} — Vendor visit notice: ${args.vendor.name}${companySuffix} — ${visitDate}`
+    : `Vendor visit notice: ${args.vendor.name}${companySuffix} — ${visitDate}`;
 
   /** Plain-text "bold-ish" section heading. Three en-dashes either side
    *  reads as a clear visual break in any mail client and survives
@@ -90,9 +114,17 @@ export function buildSecurityNotification(
   }
 
   const body = lines.join('\n');
-  // Defensive trims — these arguments may have been undefined in older
-  // persisted state before the persist `merge` backfilled defaults.
-  const to = (args.securityEmail ?? '').trim();
+
+  // Build To: field — security team is always primary recipient.
+  // When also posting to Nuvolo, mathworks@service-now.com joins the
+  // To: line (NOT CC:) so ServiceNow's inbound action processes it.
+  const securityTo = (args.securityEmail ?? '').trim();
+  const nuvoloTo =
+    postToNuvolo && args.nuvoloEmail ? args.nuvoloEmail.trim() : '';
+  const to = nuvoloTo
+    ? `${securityTo}, ${nuvoloTo}`
+    : securityTo;
+
   const cc = args.ccEmail?.trim();
 
   const params = new URLSearchParams();
