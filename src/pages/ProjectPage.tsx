@@ -25,6 +25,8 @@ export default function ProjectPage() {
   const project = useStore((s) => s.projects.find((p) => p.id === id));
   const updateProject = useStore((s) => s.updateProject);
   const deleteProject = useStore((s) => s.deleteProject);
+  const archiveProject = useStore((s) => s.archiveProject);
+  const unarchiveProject = useStore((s) => s.unarchiveProject);
   const woUrlPattern = useStore((s) => s.settings.nuvoloWorkOrderUrlPattern);
   const importedWorkOrders = useStore((s) => s.workOrders);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
@@ -91,15 +93,41 @@ export default function ProjectPage() {
   }
 
   function confirmDelete() {
-    if (window.confirm(`Delete workboard "${project!.name}"? This cannot be undone.`)) {
+    // Updated copy now that Archive is the recommended path for "I'm
+    // done with this." Delete is the rare destructive action — for
+    // genuine mistakes (test workboards, accidental creations).
+    if (
+      window.confirm(
+        `Delete workboard "${project!.name}"?\n\nPhotos, activity log, and FWKD linkage will be permanently removed. This cannot be undone.\n\nIf you just want to clean up your list, tap Cancel and use Archive instead.`,
+      )
+    ) {
       deleteProject(project!.id);
       navigate('/projects');
     }
   }
 
+  /**
+   * Archive: hide from active list, preserve all data. No confirmation
+   * — archive is reversible and one-tap. The user navigates back to
+   * the active list, where the workboard is gone but recoverable via
+   * the "View archived" footer link.
+   */
+  function handleArchive() {
+    archiveProject(project!.id);
+    navigate('/projects');
+  }
+
+  function handleUnarchive() {
+    unarchiveProject(project!.id);
+    // Stay on the workboard page after unarchive — user is probably
+    // here to re-engage with the work, not to bounce back to the list.
+  }
+
   function toggleSimple() {
     updateProject(project!.id, { simple: !isSimple });
   }
+
+  const isArchived = !!project.archivedAt;
 
   return (
     <div className="space-y-4">
@@ -108,6 +136,28 @@ export default function ProjectPage() {
           ← Workboards
         </Link>
       </div>
+
+      {/* Archived banner — visible reminder that this workboard is
+          off the active list. One-tap unarchive right here so the user
+          doesn't have to scroll down to the bottom of the page. */}
+      {isArchived && (
+        <div className="rounded-lg border border-slate-300 bg-slate-50 p-3 flex items-center justify-between gap-3 flex-wrap">
+          <div className="text-sm text-slate-700">
+            <span className="font-medium">📦 Archived.</span>{' '}
+            <span className="text-slate-500">
+              Hidden from the active list. All data preserved.
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn-secondary text-xs"
+            onClick={handleUnarchive}
+            title="Restore this workboard to your active list"
+          >
+            ↩ Unarchive
+          </button>
+        </div>
+      )}
 
       <header className="card p-4 space-y-3">
         <div className="flex items-start justify-between gap-3">
@@ -270,8 +320,26 @@ export default function ProjectPage() {
           >
             ↓ .md
           </button>
-          <button className="btn-ghost text-xs text-rose-600" onClick={confirmDelete}>
-            Delete workboard
+          {/* Archive is the routine "I'm done with this, off my list"
+              action. Light, reversible, one-tap. */}
+          {!isArchived && (
+            <button
+              className="btn-ghost text-xs"
+              onClick={handleArchive}
+              title="Hide from active list. Photos, activity, vendors, and FWKD linkage are preserved — restore anytime via 'View archived' on the Workboards list."
+            >
+              📦 Archive
+            </button>
+          )}
+          {/* Delete is now secondary — the rare "this was a test or
+              accident, scrub it" path. Tinted red so it doesn't get
+              fat-fingered when archive was what the user wanted. */}
+          <button
+            className="btn-ghost text-xs text-rose-600"
+            onClick={confirmDelete}
+            title="Permanently remove this workboard, including all photos and activity log. Use Archive instead if you just want it off your list."
+          >
+            Delete
           </button>
         </div>
       </header>
