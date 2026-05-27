@@ -6,6 +6,7 @@ import {
   type ProjectStatus,
 } from '../types';
 import { buildWorkOrderUrl, isValidWorkOrderId } from '../lib/nuvolo';
+import { workboardNumber } from '../lib/format';
 import TimetableSection from '../components/TimetableSection';
 import TradeTrackerSection from '../components/TradeTrackerSection';
 import ActivityLogSection from '../components/ActivityLogSection';
@@ -110,6 +111,20 @@ export default function ProjectPage() {
       </div>
 
       <header className="card p-4 space-y-3">
+        {/* WB# — friendly Workboard identifier derived from the
+            underlying UUID. Stable across devices via sync, so verbal
+            references between the user and a teammate ("WB-A3B4C5")
+            unambiguously refer to the same workboard regardless of
+            which device they're each on. Shown above the name so the
+            user sees it before scrolling into the workboard body. */}
+        <div className="flex items-center gap-2 text-xs">
+          <span
+            className="font-mono text-slate-500"
+            title="Workboard ID — stable across desktop and mobile via sync. Reference this when you need to verify two devices are looking at the same workboard."
+          >
+            {workboardNumber(project.id)}
+          </span>
+        </div>
         <div className="flex items-start justify-between gap-3">
           <input
             className="input text-lg font-semibold"

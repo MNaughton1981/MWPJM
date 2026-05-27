@@ -4,7 +4,7 @@ import {
   STATUS_LABELS,
   TRADE_LABELS,
 } from '../types';
-import { formatDate, formatDateTime } from './format';
+import { formatDate, formatDateTime, workboardNumber } from './format';
 
 export function buildAppData(
   projects: Project[],
@@ -55,6 +55,11 @@ export function projectToMarkdown(project: Project): string {
   const lines: string[] = [];
   lines.push(`# ${project.name}`);
   lines.push('');
+  // WB# is rendered first in the header — it's the most reliable
+  // cross-device identifier (FWKD may not exist yet for Quick
+  // Workboards, but every workboard has a WB#). FWKD remains the
+  // primary tie to Nuvolo when present.
+  lines.push(`**Workboard:** ${workboardNumber(project.id)}`);
   if (project.workOrderId) lines.push(`**Work Order:** ${project.workOrderId}`);
   if (project.location) lines.push(`**Location:** ${project.location}`);
   lines.push(`**Status:** ${PROJECT_STATUS_LABELS[project.status]}`);
@@ -172,8 +177,12 @@ export function projectToHtml(project: Project): string {
 
   parts.push(`<h1>${esc(project.name)}</h1>`);
 
-  // Header table — at-a-glance project metadata
+  // Header table — at-a-glance project metadata. WB# first so it's
+  // the most prominent identifier in the OneNote paste; FWKD second.
   const headerRows: string[] = [];
+  headerRows.push(
+    `<tr><td><b>Workboard</b></td><td>${esc(workboardNumber(project.id))}</td></tr>`,
+  );
   if (project.workOrderId)
     headerRows.push(`<tr><td><b>Work Order</b></td><td>${esc(project.workOrderId)}</td></tr>`);
   if (project.location)
