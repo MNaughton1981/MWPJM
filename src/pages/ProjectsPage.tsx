@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../state/store';
 import { TEMPLATES } from '../data/templates';
 import { PROJECT_STATUS_LABELS } from '../types';
-import { formatDateTime } from '../lib/format';
+import { formatDateTime, workboardNumber } from '../lib/format';
 import SyncQuickActions from '../components/SyncQuickActions';
 
 /**
@@ -215,6 +215,12 @@ export default function ProjectsPage() {
                   <div className="min-w-0">
                     <div className="font-semibold truncate">{p.name}</div>
                     <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                      <span
+                        className="font-mono text-slate-600"
+                        title="Workboard ID — stable across devices via sync"
+                      >
+                        {workboardNumber(p.id)}
+                      </span>
                       {p.workOrderId ? (
                         <span>WO: {p.workOrderId}</span>
                       ) : (

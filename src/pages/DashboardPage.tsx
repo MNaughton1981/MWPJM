@@ -101,6 +101,32 @@ export default function DashboardPage() {
   const [createdFilter, setCreatedFilter] = useState<CreatedFilter>('');
 
   function startProjectFromWO(wo: WorkOrder) {
+    // Dedupe by FWKD — if a workboard already exists for this work
+    // order (active OR archived), navigate to it rather than creating
+    // a new one. This addresses the cross-device friction where
+    // tapping "Open Workboard" for the same FWKD on desktop and
+    // mobile would create two distinct workboards. With dedupe, the
+    // second tap on either device lands on the existing workboard
+    // (assuming sync has run; race window between two devices opening
+    // the same FWKD before sync still exists, but that's a sync-time
+    // merge problem for a future PR — this catches the common case).
+    //
+    // We pull `projects` directly from the store at click time rather
+    // than from a hook so we always see the current list, including
+    // any that were just synced down or just archived.
+    const woNumber = wo.number?.toUpperCase();
+    if (woNumber) {
+      const existing = useStore
+        .getState()
+        .projects.find(
+          (p) => p.workOrderId?.toUpperCase() === woNumber,
+        );
+      if (existing) {
+        navigate(`/projects/${existing.id}`);
+        return;
+      }
+    }
+
     // Default to the lightweight Work Order Follow-up template — quick
     // tracking, no trades / timetable. User can flip to "full" later
     // from the project page if they need that scope.
@@ -425,7 +451,7 @@ export default function DashboardPage() {
                         className="btn-secondary text-xs"
                         onClick={() => startProjectFromWO(r)}
                         disabled={!r.number}
-                        title="Create a quick-view follow-up workboard, pre-filled with this work order's details"
+                        title="Open the workboard for this work order. Reuses an existing workboard if you already have one (active or archived) for this FWKD — won't create a duplicate."
                       >
                         Open Workboard
                       </button>
