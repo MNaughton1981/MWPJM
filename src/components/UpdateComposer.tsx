@@ -129,6 +129,15 @@ export default function UpdateComposer({ project }: Props) {
   // --- Photo batch state (for the "over budget" modal) ---
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [sendingPhotos, setSendingPhotos] = useState(false);
+  /** Compression progress: { done, total }. null when not active.
+   *  Drives the button label "Compressing 3/12…" so the user can see
+   *  work is moving — without this the button just freezes on
+   *  "Compressing photos…" for 30+ seconds with 12 photos and looks
+   *  hung. */
+  const [compressProgress, setCompressProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
 
   /** Estimated raw photo size (sum of original blobs). Updated when
    *  photos change — used for the budget indicator and the batch
@@ -167,22 +176,62 @@ export default function UpdateComposer({ project }: Props) {
     if (!nuvoloMail) return;
     setShowBatchModal(false);
     setSendingPhotos(true);
+    setCompressProgress(null);
 
     const hasPhotos = photoCount > 0;
+
+    // Track whether we successfully attached photos via the share
+    // sheet. If anything goes sideways during compression / share, we
+    // fall through to the no-attachment mailto path so the user
+    // ALWAYS gets a mail client open — never a silent failure or
+    // (worse) a white-screen crash with their note still in limbo.
+    let shareSucceeded = false;
 
     try {
       // On mobile with photos: compress + share via system sheet.
       if (isMobile && hasPhotos && mode !== 'none') {
-        const rawFiles = await loadProjectPhotoFiles(
-          project.id,
-          project.photos ?? [],
-        );
-        // Compress all — typically drops 4 MB photos to ~800 KB each.
-        const compressed = await compressPhotos(rawFiles);
+        let rawFiles: File[] = [];
+        let compressed: File[] = [];
+
+        try {
+          rawFiles = await loadProjectPhotoFiles(
+            project.id,
+            project.photos ?? [],
+          );
+        } catch (e) {
+          // IndexedDB read failed — fall through to mailto.
+          console.error('loadProjectPhotoFiles failed:', e);
+          setToast({
+            kind: 'err',
+            text: "Couldn't load photos from local storage — sending email without attachments.",
+          });
+        }
+
+        if (rawFiles.length > 0) {
+          try {
+            // Sequential compression with progress callback. Wrapped
+            // in its own try so an OOM / decode failure on photo N
+            // doesn't lose photos 1..N-1 — we just send what we have.
+            compressed = await compressPhotos(
+              rawFiles,
+              {},
+              (done, total) => setCompressProgress({ done, total }),
+            );
+          } catch (e) {
+            console.error('compressPhotos failed:', e);
+            setToast({
+              kind: 'err',
+              text: 'Photo compression failed — sending email without attachments.',
+            });
+            compressed = [];
+          } finally {
+            setCompressProgress(null);
+          }
+        }
 
         // If mode is 'batch', pick the first N that fit under the cap.
         let filesToSend = compressed;
-        if (mode === 'batch') {
+        if (mode === 'batch' && compressed.length > 0) {
           filesToSend = [];
           let running = 0;
           for (const f of compressed) {
@@ -231,6 +280,7 @@ export default function UpdateComposer({ project }: Props) {
                 kind: 'ok',
                 text: `Shared ${filesToSend.length} photo(s) — send from your mail app.${suffix}`,
               });
+              shareSucceeded = true;
               return;
             } catch (e) {
               if ((e as { name?: string }).name === 'AbortError') {
@@ -238,14 +288,17 @@ export default function UpdateComposer({ project }: Props) {
                 return;
               }
               // Fall through to mailto: on any other share error.
+              console.error('navigator.share failed:', e);
             }
           }
         }
         // If share API couldn't handle it, fall through to mailto.
       }
 
-      // Desktop path (or mobile share unavailable / mode = 'none'):
-      // open mailto with a note about photos in the body.
+      // Desktop path (or mobile share unavailable / mode = 'none' /
+      // anything threw on the way down): open mailto with a note
+      // about photos in the body.
+      if (shareSucceeded) return; // belt + suspenders
       logActivity({ postedToNuvolo: true });
       if (hasPhotos) {
         const photoNote = `\n\n[${photoCount} photo(s) captured in Workboard — attach via Nuvolo or download from the app]`;
@@ -259,8 +312,19 @@ export default function UpdateComposer({ project }: Props) {
         openMailto(nuvoloMail.href);
       }
       clearDraft();
+    } catch (e) {
+      // Outermost guard. Should never fire (every async step above
+      // has its own try/catch), but if something does throw out here
+      // we still want a toast and a usable UI rather than a white
+      // screen. Don't clear the draft — let the user retry.
+      console.error('sendWithPhotos failed:', e);
+      setToast({
+        kind: 'err',
+        text: `Send failed: ${(e as Error).message || 'unknown error'}. Your draft is preserved — try again or use Copy.`,
+      });
     } finally {
       setSendingPhotos(false);
+      setCompressProgress(null);
     }
   }
 
@@ -567,7 +631,9 @@ export default function UpdateComposer({ project }: Props) {
               disabled={sendingPhotos}
             >
               {sendingPhotos
-                ? 'Compressing…'
+                ? compressProgress
+                  ? `Compressing ${compressProgress.done}/${compressProgress.total}…`
+                  : 'Preparing…'
                 : `Send first batch that fits (~25 MB) →`}
             </button>
             <button
@@ -612,7 +678,9 @@ export default function UpdateComposer({ project }: Props) {
             }
           >
             {sendingPhotos
-              ? 'Compressing photos…'
+              ? compressProgress
+                ? `Compressing ${compressProgress.done}/${compressProgress.total}…`
+                : 'Preparing photos…'
               : isMobile && photoCount > 0
                 ? `Post to Nuvolo + ${photoCount} photo(s) →`
                 : 'Post to Nuvolo →'}
