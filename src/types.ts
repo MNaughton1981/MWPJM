@@ -163,6 +163,22 @@ export interface Project {
    * "this job is closed, get it off my main list" path.
    */
   archivedAt?: number;
+  /**
+   * Epoch ms when the workboard was pinned to the top of the
+   * Workboards list. Absence (undefined) = unpinned. Pinned
+   * workboards sort above unpinned ones, with the most recently
+   * pinned at the very top — so the user can promote a few
+   * frequently-revisited workboards (recurring kitchenette pilot,
+   * the on-call ticket they're still chasing on Monday) to a
+   * stable, easy-to-tap location regardless of how recently they
+   * were edited.
+   *
+   * Toggle pin via the 📌 button on each Workboards-list card.
+   * Pinning does NOT bump `updatedAt` — the workboard's last-
+   * touched time stays meaningful, so unpinning later doesn't
+   * leave it artificially at the top of the unpinned section.
+   */
+  pinnedAt?: number;
 }
 
 export interface Settings {

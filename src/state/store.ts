@@ -78,6 +78,19 @@ interface AppState {
   /** Undo `archiveProject` — clears `archivedAt`, restores to active list. */
   unarchiveProject: (id: string) => void;
 
+  /**
+   * Pin or unpin a workboard. Toggling pin sets / clears
+   * `pinnedAt = Date.now()`. Pinned workboards sort above unpinned
+   * ones in the Workboards list, with the most recently pinned at
+   * the top.
+   *
+   * Like archive/unarchive, pinning does NOT bump `updatedAt`. The
+   * workboard's "real" last-touched time is preserved so when the
+   * user later unpins, the row falls back to its natural place in
+   * the by-updatedAt sort instead of being artificially promoted.
+   */
+  togglePinProject: (id: string) => void;
+
   // Trades
   addTrade: (projectId: string, t: Omit<Trade, 'id'>) => void;
   updateTrade: (projectId: string, tradeId: string, patch: Partial<Trade>) => void;
@@ -229,6 +242,15 @@ export const useStore = create<AppState>()(
         set((s) => ({
           projects: s.projects.map((p) =>
             p.id === id ? { ...p, archivedAt: undefined } : p,
+          ),
+        })),
+
+      togglePinProject: (id) =>
+        set((s) => ({
+          projects: s.projects.map((p) =>
+            p.id === id
+              ? { ...p, pinnedAt: p.pinnedAt ? undefined : Date.now() }
+              : p,
           ),
         })),
 
