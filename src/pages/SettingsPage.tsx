@@ -21,6 +21,23 @@ import {
   type SyncPayload,
 } from '../lib/sync';
 import { formatDateTime } from '../lib/format';
+import PageTOC, { type PageTOCItem } from '../components/PageTOC';
+
+// TOC items mirror the order of <section> tags below. Each section
+// has an id matching one of these entries so the picker scrolls to
+// the right place. Keep in sync with any added / removed / reordered
+// sections in the JSX.
+const TOC_ITEMS: PageTOCItem[] = [
+  { id: 'sec-technician', label: 'Technician', icon: '👤' },
+  { id: 'sec-nuvolo', label: 'Nuvolo email integration', icon: '🔗' },
+  { id: 'sec-security', label: 'Security team notifications', icon: '🛡️' },
+  { id: 'sec-folder', label: 'Nuvolo report folder path', icon: '📁' },
+  { id: 'sec-photos', label: 'Photo naming pattern', icon: '🖼️' },
+  { id: 'sec-sync', label: 'Sync state via OneDrive', icon: '🔄' },
+  { id: 'sec-vendor-book', label: 'Vendor book', icon: '📒' },
+  { id: 'sec-backup', label: 'Manual backup', icon: '💾' },
+  { id: 'sec-about', label: 'About', icon: 'ℹ️' },
+];
 
 export default function SettingsPage() {
   const settings = useStore((s) => s.settings);
@@ -150,7 +167,9 @@ export default function SettingsPage() {
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">Settings</h1>
 
-      <section className="card p-4 space-y-3">
+      <PageTOC items={TOC_ITEMS} />
+
+      <section id="sec-technician" className="card p-4 space-y-3 scroll-mt-20">
         <h2 className="font-semibold">Technician</h2>
         <div>
           <label className="label">Your name (used in update sign-off)</label>
@@ -181,7 +200,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="card p-4 space-y-3">
+      <section id="sec-nuvolo" className="card p-4 space-y-3 scroll-mt-20">
         <h2 className="font-semibold">Nuvolo email integration</h2>
         <div>
           <label className="label">Inbound email address</label>
@@ -245,7 +264,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="card p-4 space-y-3">
+      <section id="sec-security" className="card p-4 space-y-3 scroll-mt-20">
         <h2 className="font-semibold">Security team notifications</h2>
         <div>
           <label className="label">Security team email</label>
@@ -284,7 +303,7 @@ export default function SettingsPage() {
         </label>
       </section>
 
-      <section className="card p-4 space-y-3">
+      <section id="sec-folder" className="card p-4 space-y-3 scroll-mt-20">
         <h2 className="font-semibold">Nuvolo report folder path</h2>
         <div>
           <label className="label">
@@ -306,7 +325,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="card p-4 space-y-3">
+      <section id="sec-photos" className="card p-4 space-y-3 scroll-mt-20">
         <h2 className="font-semibold">Photo naming pattern</h2>
         <div>
           <label className="label">Template for downloaded photo filenames</label>
@@ -324,7 +343,7 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="card p-4 space-y-3">
+      <section id="sec-sync" className="card p-4 space-y-3 scroll-mt-20">
         <div>
           <h2 className="font-semibold">Sync state via OneDrive</h2>
           <p className="text-xs text-slate-500 mt-1">
@@ -455,7 +474,7 @@ export default function SettingsPage() {
         )}
       </section>
 
-      <section className="card p-4 space-y-3">
+      <section id="sec-vendor-book" className="card p-4 space-y-3 scroll-mt-20">
         <div>
           <h2 className="font-semibold">Vendor book</h2>
           <p className="text-xs text-slate-500 mt-1">
@@ -525,7 +544,7 @@ export default function SettingsPage() {
         )}
       </section>
 
-      <section className="card p-4 space-y-3">
+      <section id="sec-backup" className="card p-4 space-y-3 scroll-mt-20">
         <h2 className="font-semibold">Manual backup</h2>
         <p className="text-sm text-slate-600">
           One-shot export and import. Useful for archiving a snapshot, or
@@ -565,7 +584,7 @@ export default function SettingsPage() {
         </p>
       </section>
 
-      <section className="card p-4 space-y-2">
+      <section id="sec-about" className="card p-4 space-y-2 scroll-mt-20">
         <h2 className="font-semibold">About</h2>
         <p className="text-sm text-slate-600">
           Workboard is a local-first PWA. No server, no account. Your data

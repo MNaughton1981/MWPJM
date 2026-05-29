@@ -15,6 +15,15 @@ import {
   readLatestReport,
 } from '../lib/folderConnection';
 import { formatDateTime } from '../lib/format';
+import PageTOC, { type PageTOCItem } from '../components/PageTOC';
+
+const TOC_ITEMS: PageTOCItem[] = [
+  { id: 'sec-folder', label: 'OneDrive folder', icon: '📁' },
+  { id: 'sec-import', label: 'Load latest report', icon: '↻' },
+  { id: 'sec-current', label: 'Current import', icon: '📊' },
+  { id: 'sec-mapping', label: 'Column mapping', icon: '🔗' },
+  { id: 'sec-howto', label: 'How to refresh from Nuvolo', icon: '❓' },
+];
 
 const COLUMN_LABELS: Record<keyof ColumnMap, string> = {
   number: 'Work Order # (FWKD…)',
@@ -167,7 +176,9 @@ export default function ReportsPage() {
       )}
 
       {/* === Section 1: folder connection === */}
-      <section className="card p-4 space-y-3">
+      <PageTOC items={TOC_ITEMS} />
+
+      <section id="sec-folder" className="card p-4 space-y-3 scroll-mt-20">
         <h2 className="font-semibold">OneDrive folder</h2>
         <p className="text-xs text-slate-500">
           Configured path (display only — set in Settings):
@@ -209,7 +220,7 @@ export default function ReportsPage() {
       </section>
 
       {/* === Section 2: import === */}
-      <section className="card p-4 space-y-3">
+      <section id="sec-import" className="card p-4 space-y-3 scroll-mt-20">
         <h2 className="font-semibold">Load latest report</h2>
         <div className="flex flex-wrap gap-2">
           {folderApi && connectedFolder && (
@@ -262,7 +273,7 @@ export default function ReportsPage() {
 
       {/* === Section 3: current import === */}
       {workOrders ? (
-        <section className="card p-4 space-y-2">
+        <section id="sec-current" className="card p-4 space-y-2 scroll-mt-20">
           <h2 className="font-semibold">Current import</h2>
           <dl className="text-sm grid grid-cols-1 sm:grid-cols-3 gap-2">
             <div>
@@ -282,7 +293,7 @@ export default function ReportsPage() {
           </dl>
         </section>
       ) : (
-        <section className="card p-6 text-center text-sm text-slate-500">
+        <section id="sec-current" className="card p-6 text-center text-sm text-slate-500 scroll-mt-20">
           No data loaded yet. Connect a folder and refresh, or pick a CSV
           manually above.
         </section>
@@ -290,7 +301,7 @@ export default function ReportsPage() {
 
       {/* === Section 4: column mapping === */}
       {workOrders && (
-        <section className="card p-4 space-y-3">
+        <section id="sec-mapping" className="card p-4 space-y-3 scroll-mt-20">
           <div>
             <h2 className="font-semibold">Column mapping</h2>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -321,7 +332,7 @@ export default function ReportsPage() {
       )}
 
       {/* === Section 5: how-to === */}
-      <section className="card p-4 text-xs text-slate-600 space-y-3">
+      <section id="sec-howto" className="card p-4 text-xs text-slate-600 space-y-3 scroll-mt-20">
         <h2 className="font-semibold text-sm text-slate-800">
           How to refresh from Nuvolo
         </h2>
