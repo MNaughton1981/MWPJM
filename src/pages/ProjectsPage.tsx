@@ -26,6 +26,7 @@ export default function ProjectsPage() {
   const projects = useStore((s) => s.projects);
   const addProject = useStore((s) => s.addProject);
   const unarchiveProject = useStore((s) => s.unarchiveProject);
+  const togglePinProject = useStore((s) => s.togglePinProject);
   const navigate = useNavigate();
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState('');
@@ -40,19 +41,34 @@ export default function ProjectsPage() {
   // Filter to either active (default) or archived (toggle) before
   // sorting, so the rest of the render code is identical for both
   // modes — just the button row at the top of each row differs.
+  //
+  // Active list sort order:
+  //   1. Pinned workboards first, most recently pinned at the top.
+  //   2. Then unpinned, by updatedAt desc as before.
+  // The pinned section gets a subtle visual treatment (📌 icon and a
+  // light amber tint on the card border) so the user can tell at a
+  // glance that those rows are stuck at the top by intent.
+  //
+  // Archived list ignores pin state — pin/unpin is for keeping things
+  // visible at the top of the *active* working list, not for re-
+  // ranking historical archived items.
   const sorted = useMemo(() => {
     const filtered = projects.filter((p) =>
       showArchived ? !!p.archivedAt : !p.archivedAt,
     );
-    return filtered.sort(
-      (a, b) =>
-        // Archived list sorts by archive time (most recently archived
-        // first); active list sorts by updatedAt as before.
-        showArchived
-          ? (b.archivedAt ?? 0) - (a.archivedAt ?? 0)
-          : new Date(b.updatedAt).getTime() -
-            new Date(a.updatedAt).getTime(),
-    );
+    if (showArchived) {
+      return filtered.sort(
+        (a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0),
+      );
+    }
+    return filtered.sort((a, b) => {
+      const aPinned = a.pinnedAt ?? 0;
+      const bPinned = b.pinnedAt ?? 0;
+      if (aPinned !== bPinned) return bPinned - aPinned;
+      return (
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      );
+    });
   }, [projects, showArchived]);
 
   function createProject() {
@@ -94,6 +110,17 @@ export default function ProjectsPage() {
     e.preventDefault();
     e.stopPropagation();
     unarchiveProject(projectId);
+  }
+
+  /**
+   * Pin / unpin toggle from the workboards list. Same defensive
+   * preventDefault as unarchive — the row is a navigable link, so
+   * tapping the pin icon shouldn't punch through into the workboard.
+   */
+  function handleTogglePin(e: React.MouseEvent, projectId: string) {
+    e.preventDefault();
+    e.stopPropagation();
+    togglePinProject(projectId);
   }
 
   return (
@@ -203,17 +230,38 @@ export default function ProjectsPage() {
         </div>
       ) : (
         <ul className="space-y-2">
-          {sorted.map((p) => (
+          {sorted.map((p) => {
+            const isPinned = !!p.pinnedAt;
+            return (
             <li key={p.id}>
               <Link
                 to={`/projects/${p.id}`}
                 className={`block card p-4 hover:border-brand-500 hover:shadow transition ${
                   showArchived ? 'opacity-80' : ''
+                } ${
+                  // Subtle amber border on pinned rows so the user can
+                  // see at a glance that this row is stuck at the top
+                  // by intent, not just because it's the most recently
+                  // updated.
+                  !showArchived && isPinned
+                    ? 'border-amber-300 bg-amber-50/40'
+                    : ''
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="font-semibold truncate">{p.name}</div>
+                    <div className="font-semibold truncate flex items-center gap-1.5">
+                      {!showArchived && isPinned && (
+                        <span
+                          className="text-amber-600 shrink-0"
+                          title="Pinned to top"
+                          aria-label="Pinned to top"
+                        >
+                          📌
+                        </span>
+                      )}
+                      <span className="truncate">{p.name}</span>
+                    </div>
                     <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
                       <span
                         className="font-mono text-slate-600"
@@ -240,6 +288,26 @@ export default function ProjectsPage() {
                     <span className="pill bg-slate-100 text-slate-700">
                       {PROJECT_STATUS_LABELS[p.status]}
                     </span>
+                    {!showArchived && (
+                      <button
+                        type="button"
+                        className={`text-base leading-none w-8 h-8 rounded-md flex items-center justify-center transition ${
+                          isPinned
+                            ? 'text-amber-600 hover:bg-amber-100'
+                            : 'text-slate-400 hover:text-amber-600 hover:bg-slate-100'
+                        }`}
+                        onClick={(e) => handleTogglePin(e, p.id)}
+                        title={
+                          isPinned
+                            ? 'Unpin — return to normal sort order'
+                            : 'Pin to top of Workboards list'
+                        }
+                        aria-label={isPinned ? 'Unpin workboard' : 'Pin workboard'}
+                        aria-pressed={isPinned}
+                      >
+                        {isPinned ? '📌' : '📍'}
+                      </button>
+                    )}
                     {showArchived && (
                       <button
                         type="button"
@@ -264,7 +332,8 @@ export default function ProjectsPage() {
                 </div>
               </Link>
             </li>
-          ))}
+            );
+          })}
         </ul>
       )}
 
