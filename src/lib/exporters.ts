@@ -1,4 +1,4 @@
-import type { AppData, Project, SavedVendor, Settings } from '../types';
+import type { AppData, Project, SavedVendor, SavedVendorEvent, Settings } from '../types';
 import {
   PROJECT_STATUS_LABELS,
   STATUS_LABELS,
@@ -10,6 +10,7 @@ export function buildAppData(
   projects: Project[],
   settings: Settings,
   savedVendors: SavedVendor[] = [],
+  savedVendorEvents: SavedVendorEvent[] = [],
 ): AppData {
   return {
     version: 1,
@@ -17,6 +18,7 @@ export function buildAppData(
     projects,
     settings,
     savedVendors,
+    savedVendorEvents,
   };
 }
 
