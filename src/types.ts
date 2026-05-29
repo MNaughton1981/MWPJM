@@ -65,6 +65,26 @@ export interface Vendor {
    */
   visitTime?: string;
   notes?: string;
+  /**
+   * When true, this vendor is the workboard's point of contact —
+   * the person you're coordinating with for this visit. Single POC
+   * per workboard (radio-button semantics enforced by the
+   * `setPrimaryVendorContact` store action: setting one as POC
+   * automatically clears the flag on every other vendor in the
+   * same workboard).
+   *
+   * Two effects when set AND `email` is non-empty:
+   *   1. Listed first in the vendor list with a ★ marker.
+   *   2. CC'd on every security notification email sent from this
+   *      workboard (both per-vendor and the multi-vendor "Notify
+   *      security (all vendors)" button), so the POC stays in the
+   *      loop on badge prep / arrival logistics regardless of which
+   *      vendor's button was tapped.
+   *
+   * Absence (undefined / false) = not the POC. Existing vendors
+   * without this field default to non-POC.
+   */
+  isPrimaryContact?: boolean;
 }
 
 /**

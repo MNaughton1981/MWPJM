@@ -122,6 +122,24 @@ interface AppState {
     patch: Partial<Vendor>,
   ) => void;
   removeVendor: (projectId: string, vendorId: string) => void;
+  /**
+   * Mark a vendor as the workboard's point of contact (radio-button
+   * semantics — at most one POC per workboard). Pass the vendor's id
+   * to set it as POC and automatically clear `isPrimaryContact` on
+   * every other vendor in the same workboard. Pass `null` to clear
+   * the POC entirely (no vendor flagged).
+   *
+   * Why a dedicated action rather than letting the caller toggle
+   * `isPrimaryContact` via `updateVendor`: enforcing the single-POC
+   * invariant in one place means the per-vendor card UI doesn't
+   * have to care about iterating-and-clearing siblings, and a
+   * future "Save as event" flow can call this safely without
+   * leaking the radio logic into the call site.
+   */
+  setPrimaryVendorContact: (
+    projectId: string,
+    vendorId: string | null,
+  ) => void;
 
   // Saved vendor "book" — global, shared across all workboards.
   /**
@@ -413,6 +431,25 @@ export const useStore = create<AppState>()(
               ? touch({
                   ...p,
                   vendors: (p.vendors ?? []).filter((v) => v.id !== vendorId),
+                })
+              : p,
+          ),
+        })),
+
+      setPrimaryVendorContact: (projectId, vendorId) =>
+        set((s) => ({
+          projects: s.projects.map((p) =>
+            p.id === projectId
+              ? touch({
+                  ...p,
+                  // Radio semantics: every vendor's isPrimaryContact is
+                  // recomputed in one pass so the invariant "at most one
+                  // POC per workboard" can never drift, even if the
+                  // store gets called twice in quick succession.
+                  vendors: (p.vendors ?? []).map((v) => ({
+                    ...v,
+                    isPrimaryContact: v.id === vendorId,
+                  })),
                 })
               : p,
           ),
