@@ -6,6 +6,7 @@ import { TEMPLATES } from '../data/templates';
 import { PROJECT_STATUS_LABELS } from '../types';
 import { formatDateTime, workboardNumber } from '../lib/format';
 import SyncQuickActions from '../components/SyncQuickActions';
+import VendorEventsModal from '../components/VendorEventsModal';
 
 /**
  * Workboards list page.
@@ -26,11 +27,16 @@ export default function ProjectsPage() {
   const projects = useStore((s) => s.projects);
   const addProject = useStore((s) => s.addProject);
   const unarchiveProject = useStore((s) => s.unarchiveProject);
+  const savedVendorEvents = useStore((s) => s.savedVendorEvents);
   const navigate = useNavigate();
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState('');
   const [templateId, setTemplateId] = useState(TEMPLATES[0].id);
   const [showArchived, setShowArchived] = useState(false);
+  // Vendor events modal — opens via the "📅 Vendor events" button.
+  // Modal manages its own list / fire / edit modes internally; this
+  // page just controls whether it's mounted.
+  const [eventsOpen, setEventsOpen] = useState(false);
 
   const archivedCount = useMemo(
     () => projects.filter((p) => !!p.archivedAt).length,
@@ -114,6 +120,22 @@ export default function ProjectsPage() {
               the device — only renders the buttons that can actually
               do something there. */}
           <SyncQuickActions />
+          <button
+            className="btn-ghost text-sm"
+            onClick={() => setEventsOpen(true)}
+            title={
+              savedVendorEvents.length > 0
+                ? `Pick a saved recurring service event (${savedVendorEvents.length}) to fire a security notification`
+                : 'Save recurring services (quarterly drain, annual fire alarm, etc.) so you can fire the next notification with one tap'
+            }
+          >
+            📅 Vendor events
+            {savedVendorEvents.length > 0 && (
+              <span className="ml-1 text-xs text-slate-500">
+                ({savedVendorEvents.length})
+              </span>
+            )}
+          </button>
           <button
             className="btn-primary"
             onClick={createQuickWorkboard}
@@ -292,6 +314,12 @@ export default function ProjectsPage() {
           </button>
         )}
       </div>
+
+      {/* Vendor events modal — mounted only when open so it doesn't
+          eat any keyboard / focus when the user isn't using it. */}
+      {eventsOpen && (
+        <VendorEventsModal onClose={() => setEventsOpen(false)} />
+      )}
     </div>
   );
 }
