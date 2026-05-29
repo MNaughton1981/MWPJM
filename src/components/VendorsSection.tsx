@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import type { Project, SavedVendor, Vendor } from '../types';
 import { useStore } from '../state/store';
 import {
+  buildMultiVendorSecurityNotification,
   buildSecurityNotification,
+  type MultiVendorSecurityNotificationArgs,
   type SecurityNotificationArgs,
 } from '../lib/security';
 import { isValidWorkOrderId } from '../lib/nuvolo';
@@ -20,22 +22,41 @@ interface Props {
  * to the configured security team email so they can pre-stage badges /
  * access without you having to type the same details every time.
  *
- * As of the vendor-book update: if the user has previously saved
- * vendors via the "💾 Save to book" button on any workboard, a
- * "From book" picker appears next to "+ Add vendor" so they can
- * one-tap insert a known vendor's name/company/phone/email instead
- * of retyping it. Visit-specific fields (date, time, notes) are
- * left blank for the user to fill in for this particular visit.
+ * Section-level "Notify security (all vendors)" button (shown when
+ * there are 2+ named vendors) sends a single email covering every
+ * vendor in one mailto: instead of N separate emails — same
+ * structured layout extended with one block per vendor.
+ *
+ * Point of contact: each card has a ★ toggle to designate that vendor
+ * as the workboard's POC. Single POC per workboard (radio semantics);
+ * the POC is sorted to the top of the list, marked with a ★ in
+ * security notification emails, and CC'd on every notification email
+ * (when they have a non-empty email address) — so they stay in the
+ * loop on badge prep regardless of which vendor's button was tapped.
+ *
+ * Vendor book: if the user has previously saved vendors via the
+ * "💾 Save to book" button on any workboard, a "From book" picker
+ * appears next to "+ Add vendor" so they can one-tap insert a known
+ * vendor's name/company/phone/email instead of retyping it.
  */
 export default function VendorsSection({ project }: Props) {
   const settings = useStore((s) => s.settings);
   const addVendor = useStore((s) => s.addVendor);
   const updateVendor = useStore((s) => s.updateVendor);
   const removeVendor = useStore((s) => s.removeVendor);
+  const setPrimaryVendorContact = useStore((s) => s.setPrimaryVendorContact);
   const savedVendors = useStore((s) => s.savedVendors);
   const addOrUpdateSavedVendor = useStore((s) => s.addOrUpdateSavedVendor);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerFilter, setPickerFilter] = useState('');
+  /**
+   * Section-level "Also post to Nuvolo" toggle for the multi-vendor
+   * email button. Mirrors the per-card checkbox: defaults to ON when
+   * the workboard has a valid FWKD, so the common case (tied to a
+   * work order) sends one combined email to security + Nuvolo. Off
+   * for the "covering for someone else" case.
+   */
+  const [multiAlsoNuvolo, setMultiAlsoNuvolo] = useState(true);
 
   const vendors = project.vendors ?? [];
   // Optional chaining + fallback — settings.securityEmail may be undefined
@@ -43,6 +64,28 @@ export default function VendorsSection({ project }: Props) {
   // (the persist `merge` in store.ts now backfills it, but stay defensive).
   const securityConfigured = !!settings.securityEmail?.trim();
   const woValid = isValidWorkOrderId(project.workOrderId);
+
+  // POC sorts to the top of the list. Insertion order is preserved
+  // for everyone else. Sorting via useMemo to avoid re-sorting on
+  // every render — the array reference stays stable while the
+  // vendors array is unchanged.
+  const orderedVendors = useMemo(() => {
+    const pocIdx = vendors.findIndex((v) => v.isPrimaryContact);
+    if (pocIdx <= 0) return vendors; // No POC, or POC already first
+    const out = vendors.slice();
+    const [poc] = out.splice(pocIdx, 1);
+    out.unshift(poc);
+    return out;
+  }, [vendors]);
+
+  const namedVendorCount = useMemo(
+    () => vendors.filter((v) => v.name.trim()).length,
+    [vendors],
+  );
+  const poc = useMemo(
+    () => vendors.find((v) => v.isPrimaryContact) ?? null,
+    [vendors],
+  );
 
   // Filtered + sorted picker list — case-insensitive match across
   // name and company so "city" matches "City Point" and "warren"
@@ -94,6 +137,12 @@ export default function VendorsSection({ project }: Props) {
     setPickerFilter('');
   }
 
+  /**
+   * Per-vendor security notification. POC's email (if set) is added
+   * to the CC list alongside the user's own email — so even when
+   * the user fires off "Notify security" on a non-POC vendor, the
+   * POC stays in the loop on the badge prep / arrival logistics.
+   */
   function notifySecurity(vendor: Vendor, alsoPostToNuvolo: boolean) {
     if (!securityConfigured) return;
     if (!vendor.name.trim()) {
@@ -109,6 +158,11 @@ export default function VendorsSection({ project }: Props) {
       },
       securityEmail: settings.securityEmail ?? '',
       ccEmail: settings.securityCcSelf ? settings.userEmail : undefined,
+      // Add POC email (when set + non-empty) to the CC list. Dedupe
+      // is handled inside buildSecurityNotification — if the POC is
+      // the same vendor we're notifying about, or has the same
+      // email as the user, the address won't appear twice.
+      ccEmails: [poc?.email],
       preamble: settings.securityPreamble,
       technicianName: settings.technicianName,
       alsoPostToNuvolo,
@@ -118,10 +172,61 @@ export default function VendorsSection({ project }: Props) {
     window.location.href = mail.href;
   }
 
+  /**
+   * Section-level multi-vendor security notification. One mailto:
+   * covering every named vendor on the workboard. Same CC logic as
+   * the per-vendor flow (user email + POC email, deduped).
+   */
+  function notifySecurityAllVendors(alsoPostToNuvolo: boolean) {
+    if (!securityConfigured) return;
+    if (namedVendorCount === 0) {
+      window.alert('Add at least one vendor with a name first.');
+      return;
+    }
+    const args: MultiVendorSecurityNotificationArgs = {
+      vendors,
+      project: {
+        name: project.name,
+        workOrderId: project.workOrderId,
+        location: project.location,
+      },
+      securityEmail: settings.securityEmail ?? '',
+      ccSelf: settings.securityCcSelf,
+      userEmail: settings.userEmail,
+      preamble: settings.securityPreamble,
+      technicianName: settings.technicianName,
+      alsoPostToNuvolo,
+      nuvoloEmail: settings.nuvoloEmail,
+    };
+    const mail = buildMultiVendorSecurityNotification(args);
+    window.location.href = mail.href;
+  }
+
+  /**
+   * Toggle a vendor's POC flag. Sending the vendor's id calls the
+   * store action with radio semantics (auto-clears any other POC).
+   * If the vendor is already POC, send `null` to clear it entirely.
+   */
+  function togglePoc(vendorId: string) {
+    const current = vendors.find((v) => v.id === vendorId);
+    if (current?.isPrimaryContact) {
+      setPrimaryVendorContact(project.id, null);
+    } else {
+      setPrimaryVendorContact(project.id, vendorId);
+    }
+  }
+
   return (
     <section className="card p-4 space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h2 className="font-semibold">Vendors / contacts</h2>
+        <h2 className="font-semibold">
+          Vendors / contacts
+          {poc && poc.name.trim() && (
+            <span className="ml-2 text-xs font-normal text-amber-700">
+              ★ POC: {poc.name}
+            </span>
+          )}
+        </h2>
         <div className="flex items-center gap-2 relative">
           {savedVendors.length > 0 && (
             <button
@@ -214,12 +319,13 @@ export default function VendorsSection({ project }: Props) {
         </p>
       ) : (
         <ul className="space-y-3">
-          {vendors.map((v) => (
+          {orderedVendors.map((v) => (
             <VendorCard
               key={v.id}
               vendor={v}
               onChange={(patch) => updateVendor(project.id, v.id, patch)}
               onRemove={() => removeVendor(project.id, v.id)}
+              onTogglePoc={() => togglePoc(v.id)}
               onNotifySecurity={(alsoNuvolo) => notifySecurity(v, alsoNuvolo)}
               onSaveToBook={() =>
                 addOrUpdateSavedVendor({
@@ -243,6 +349,41 @@ export default function VendorsSection({ project }: Props) {
             />
           ))}
         </ul>
+      )}
+
+      {/* Section-level multi-vendor notify button. Hidden when there's
+          0 named vendors (nothing to send) or only 1 (per-vendor button
+          handles that case). The point of this is "one email for the
+          whole crew" — so showing it for a single vendor would be
+          redundant and confusing. */}
+      {securityConfigured && namedVendorCount >= 2 && (
+        <div className="border-t pt-3 flex flex-wrap items-center justify-end gap-3">
+          {woValid && (
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={multiAlsoNuvolo}
+                onChange={(e) => setMultiAlsoNuvolo(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+              />
+              Also post to Nuvolo ({project.workOrderId})
+            </label>
+          )}
+          <button
+            type="button"
+            className="btn-primary text-sm"
+            onClick={() =>
+              notifySecurityAllVendors(multiAlsoNuvolo && woValid)
+            }
+            title={
+              multiAlsoNuvolo && woValid
+                ? `Open mail to security + Nuvolo (${project.workOrderId}) with one combined notice covering all ${namedVendorCount} vendors`
+                : `Open mail with one combined notice covering all ${namedVendorCount} vendors`
+            }
+          >
+            🛡️ Notify security (all {namedVendorCount} vendors) →
+          </button>
+        </div>
       )}
 
       {!securityConfigured && vendors.length > 0 && (
@@ -274,6 +415,7 @@ function VendorCard({
   vendor,
   onChange,
   onRemove,
+  onTogglePoc,
   onNotifySecurity,
   onSaveToBook,
   isInBook,
@@ -284,6 +426,7 @@ function VendorCard({
   vendor: Vendor;
   onChange: (patch: Partial<Vendor>) => void;
   onRemove: () => void;
+  onTogglePoc: () => void;
   onNotifySecurity: (alsoPostToNuvolo: boolean) => void;
   onSaveToBook: () => void;
   isInBook: boolean;
@@ -293,10 +436,35 @@ function VendorCard({
 }) {
   // Per-card state: defaults to ON when a valid WO ID exists.
   const [alsoNuvolo, setAlsoNuvolo] = useState(hasValidWorkOrder);
+  const isPoc = !!vendor.isPrimaryContact;
 
   return (
-    <li className="border border-slate-200 rounded-lg p-3 space-y-2">
+    <li
+      className={`border rounded-lg p-3 space-y-2 ${
+        isPoc
+          ? 'border-amber-300 bg-amber-50/40'
+          : 'border-slate-200'
+      }`}
+    >
       <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={onTogglePoc}
+          className={`text-lg leading-none w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition ${
+            isPoc
+              ? 'text-amber-500 hover:bg-amber-100'
+              : 'text-slate-300 hover:text-amber-500 hover:bg-slate-100'
+          }`}
+          title={
+            isPoc
+              ? 'This vendor is the workboard point of contact. Tap to clear.'
+              : 'Mark this vendor as the workboard point of contact (CC\'d on every security notification when they have email set)'
+          }
+          aria-label={isPoc ? 'Unset point of contact' : 'Set as point of contact'}
+          aria-pressed={isPoc}
+        >
+          {isPoc ? '★' : '☆'}
+        </button>
         <input
           className="input font-medium flex-1"
           placeholder="Vendor name (e.g. Joe Warren)"
@@ -342,7 +510,17 @@ function VendorCard({
           />
         </div>
         <div>
-          <label className="label">Email</label>
+          <label className="label">
+            Email
+            {isPoc && (
+              <span
+                className="ml-1.5 text-[10px] font-normal text-amber-700"
+                title="This vendor is the POC — when set, this email is CC'd on every security notification from this workboard."
+              >
+                CC'd on security emails
+              </span>
+            )}
+          </label>
           <input
             type="email"
             className="input"
