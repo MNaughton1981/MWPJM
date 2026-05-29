@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useStore } from '../state/store';
 import {
@@ -13,6 +13,7 @@ import ActivityLogSection from '../components/ActivityLogSection';
 import PhotosSection from '../components/PhotosSection';
 import UpdateComposer from '../components/UpdateComposer';
 import VendorsSection from '../components/VendorsSection';
+import PageTOC, { type PageTOCItem } from '../components/PageTOC';
 import {
   downloadText,
   projectToHtml,
@@ -66,6 +67,27 @@ export default function ProjectPage() {
     : undefined;
 
   const isSimple = project.simple ?? false;
+
+  // TOC items mirror the section ids on this page in render order.
+  // Trade Coordination and Timetable are gated on `simple` mode —
+  // when the user has chosen the quick follow-up view, those
+  // sections aren't rendered, so we drop their entries from the
+  // picker too. Without this filter the picker would let the user
+  // try to jump to a section that doesn't exist on the page.
+  const tocItems = useMemo<PageTOCItem[]>(() => {
+    const items: PageTOCItem[] = [
+      { id: 'sec-header', label: 'Workboard header', icon: '📋' },
+      { id: 'sec-compose', label: 'Compose Note', icon: '✍️' },
+      { id: 'sec-vendors', label: 'Vendors / contacts', icon: '👥' },
+    ];
+    if (!isSimple) {
+      items.push({ id: 'sec-trades', label: 'Trade Coordination', icon: '🔧' });
+      items.push({ id: 'sec-timetable', label: 'Timetable', icon: '📅' });
+    }
+    items.push({ id: 'sec-photos', label: 'Photos', icon: '🖼️' });
+    items.push({ id: 'sec-activity', label: 'Activity Log', icon: '📜' });
+    return items;
+  }, [isSimple]);
 
   // Primary export path: write rich HTML + plain-text fallback to the
   // clipboard. User switches to their notes app of choice (OneNote,
@@ -160,7 +182,9 @@ export default function ProjectPage() {
         </div>
       )}
 
-      <header className="card p-4 space-y-3">
+      <PageTOC items={tocItems} />
+
+      <header id="sec-header" className="card p-4 space-y-3 scroll-mt-20">
         {/* WB# — friendly Workboard identifier derived from the
             underlying UUID. Stable across devices via sync, so verbal
             references between the user and a teammate ("WB-A3B4C5")
@@ -359,30 +383,42 @@ export default function ProjectPage() {
         </div>
       </header>
 
-      <UpdateComposer project={project} />
+      <div id="sec-compose" className="scroll-mt-20">
+        <UpdateComposer project={project} />
+      </div>
 
-      <VendorsSection project={project} />
+      <div id="sec-vendors" className="scroll-mt-20">
+        <VendorsSection project={project} />
+      </div>
 
       {!isSimple && (
-        <TradeTrackerSection
-          projectId={project.id}
-          trades={project.trades}
-        />
+        <div id="sec-trades" className="scroll-mt-20">
+          <TradeTrackerSection
+            projectId={project.id}
+            trades={project.trades}
+          />
+        </div>
       )}
 
       {!isSimple && (
-        <TimetableSection
-          projectId={project.id}
-          milestones={project.milestones}
-        />
+        <div id="sec-timetable" className="scroll-mt-20">
+          <TimetableSection
+            projectId={project.id}
+            milestones={project.milestones}
+          />
+        </div>
       )}
 
-      <PhotosSection project={project} />
+      <div id="sec-photos" className="scroll-mt-20">
+        <PhotosSection project={project} />
+      </div>
 
-      <ActivityLogSection
-        projectId={project.id}
-        activity={project.activity}
-      />
+      <div id="sec-activity" className="scroll-mt-20">
+        <ActivityLogSection
+          projectId={project.id}
+          activity={project.activity}
+        />
+      </div>
     </div>
   );
 }
