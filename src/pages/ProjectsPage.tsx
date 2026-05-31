@@ -22,16 +22,20 @@ import SyncQuickActions from '../components/SyncQuickActions';
  * activity log, vendor coordination, FWKD linkage). Archive gives
  * them the same "get it off my list" outcome without the data loss.
  */
+
 export default function ProjectsPage() {
   const projects = useStore((s) => s.projects);
   const addProject = useStore((s) => s.addProject);
   const unarchiveProject = useStore((s) => s.unarchiveProject);
+  const savedVendorEvents = useStore((s) => s.savedVendorEvents);
   const togglePinProject = useStore((s) => s.togglePinProject);
   const navigate = useNavigate();
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState('');
   const [templateId, setTemplateId] = useState(TEMPLATES[0].id);
   const [showArchived, setShowArchived] = useState(false);
+  const [eventsOpen, setEventsOpen] = useState(false);
+
 
   const archivedCount = useMemo(
     () => projects.filter((p) => !!p.archivedAt).length,
