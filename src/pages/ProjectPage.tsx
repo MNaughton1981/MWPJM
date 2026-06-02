@@ -120,8 +120,11 @@ export default function ProjectPage() {
   // "Repair/Project status by location" section of meeting notes.
   // Copies plain text to clipboard (not rich HTML) so it pastes
   // cleanly into the existing template structure.
+  // 
+  // Merges Nuvolo CSV notes with workboard activity when CSV data is
+  // available, creating a unified executive summary.
   async function exportOneOnOneSummary() {
-    const summary = projectToOneOnOneSummary(project!);
+    const summary = projectToOneOnOneSummary(project!, importedWorkOrders);
     try {
       await navigator.clipboard.writeText(summary);
       setCopyStatus('1:1 summary copied — paste into your meeting notes.');

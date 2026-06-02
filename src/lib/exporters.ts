@@ -322,8 +322,15 @@ export function projectToHtml(project: Project): string {
  *   - Summary text
  *   - Recent activity / next steps
  *   - Vendor info if applicable
+ * 
+ * When importedWorkOrders is provided and contains a matching FWKD, the summary
+ * merges Nuvolo CSV notes (Work Notes, Close Notes, Comments fields) with the
+ * workboard's local activity log to create a unified executive summary.
  */
-export function projectToOneOnOneSummary(project: Project): string {
+export function projectToOneOnOneSummary(
+  project: Project,
+  importedWorkOrders?: { rows: { number: string; extra: Record<string, string> }[] } | null,
+): string {
   const lines: string[] = [];
   
   // Header: FWKD - Description - Status tag (New/No Change/Done)
@@ -353,11 +360,66 @@ export function projectToOneOnOneSummary(project: Project): string {
     });
   }
   
-  // Recent activity (most recent 3 entries)
-  const recentActivity = [...project.activity]
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, 3);
+  // Cross-reference with Nuvolo CSV notes if available
+  let csvNotes: string[] = [];
+  if (importedWorkOrders && project.workOrderId) {
+    const woNumber = project.workOrderId.toUpperCase();
+    const matchedRow = importedWorkOrders.rows.find(
+      r => r.number?.toUpperCase() === woNumber
+    );
+    
+    if (matchedRow && matchedRow.extra) {
+      // Common Nuvolo/ServiceNow note field names (case-insensitive match)
+      const noteFieldPatterns = [
+        'worknotes', 'work_notes', 'notes', 'comments', 
+        'closenotes', 'close_notes', 'resolution_notes',
+        'description', 'additional_comments'
+      ];
+      
+      for (const [key, value] of Object.entries(matchedRow.extra)) {
+        const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const isNoteField = noteFieldPatterns.some(pattern => 
+          normalizedKey.includes(pattern.replace(/_/g, ''))
+        );
+        
+        if (isNoteField && value && value.trim()) {
+          // Parse multiline notes (Nuvolo often uses newlines or special delimiters)
+          const noteLines = value
+            .split(/\r?\n/)
+            .map(l => l.trim())
+            .filter(l => l.length > 0 && !l.match(/^-{3,}$/)); // Filter out separator lines
+          csvNotes.push(...noteLines);
+        }
+      }
+    }
+  }
   
+  // Merge CSV notes with workboard activity (chronologically)
+  const allActivity: Array<{ timestamp: string; text: string; source: 'csv' | 'workboard' }> = [];
+  
+  // Add CSV notes (use current date as approximate timestamp if no date is embedded)
+  csvNotes.forEach(note => {
+    allActivity.push({
+      timestamp: new Date().toISOString(), // Fallback timestamp
+      text: note,
+      source: 'csv'
+    });
+  });
+  
+  // Add workboard activity
+  project.activity.forEach(a => {
+    allActivity.push({
+      timestamp: a.timestamp,
+      text: a.text,
+      source: 'workboard'
+    });
+  });
+  
+  // Sort by timestamp (most recent first), then take top 5 entries
+  allActivity.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  const recentActivity = allActivity.slice(0, 5);
+  
+  // Recent activity (merged CSV + workboard)
   if (recentActivity.length > 0) {
     recentActivity.forEach(a => {
       const dateStr = formatDate(a.timestamp);
@@ -367,6 +429,9 @@ export function projectToOneOnOneSummary(project: Project): string {
         lines.push(`${prefix}${line.trim()}`);
       });
     });
+  } else if (csvNotes.length === 0 && project.activity.length === 0) {
+    // No activity from either source
+    lines.push(`\t§ No recent activity`);
   }
   
   // Vendors on-site (if any with visit dates)
