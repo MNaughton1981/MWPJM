@@ -136,6 +136,28 @@ export function buildGoogleCalendarUrl(args: IcsArgs): string {
   setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
+/**
+ * Build a Google Calendar "add event" URL. Opens calendar.google.com
+ * with the event pre-filled. No .ics download, no mailto: — just a
+ * web URL the user can click to add the event directly.
+ */
+export function buildGoogleCalendarUrl(args: IcsArgs): string {
+  const dur = args.durationMinutes ?? 15;
+  const end = new Date(args.start.getTime() + dur * 60 * 1000);
+  // Google Calendar expects dates in "YYYYMMDDTHHmmssZ" format (UTC)
+  const fmt = (d: Date) =>
+    d.toISOString().replace(/[-:.]/g, '').slice(0, 15) + 'Z';
+  
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: args.title,
+    details: args.description,
+    dates: `${fmt(args.start)}/${fmt(end)}`,
+  });
+  
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
 export async function copyToClipboard(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);
