@@ -22,6 +22,25 @@ const CREATED_LABELS: Record<CreatedFilter, string> = {
 };
 
 /**
+ * Map work order state to a color class for the card header bar.
+ * Open states = blue, in-progress = amber, closed/resolved = slate.
+ */
+function getStateColor(state: string): string {
+  const s = state?.toLowerCase() || '';
+  if (s.includes('open') || s.includes('new') || s.includes('pending')) {
+    return 'bg-blue-500 text-white';
+  }
+  if (s.includes('progress') || s.includes('work') || s.includes('assigned')) {
+    return 'bg-amber-500 text-white';
+  }
+  if (s.includes('closed') || s.includes('resolved') || s.includes('complete')) {
+    return 'bg-slate-500 text-white';
+  }
+  // Default fallback
+  return 'bg-slate-400 text-white';
+}
+
+/**
  * Fuzzy "does this CSV assignee name match the user's technician name?"
  * check. We compare lowercase trimmed strings and accept either-direction
  * containment so "Matt Naughton" in the CSV still matches a settings
@@ -400,91 +419,107 @@ export default function DashboardPage() {
           )}
         </div>
 
-        <div className="overflow-x-auto -mx-3">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-slate-500 border-b">
-                <th className="px-3 py-2">#</th>
-                {/* Action column placed right after # so on a phone the
-                    user can tap "Open Workboard" without scrolling the
-                    table sideways. */}
-                <th className="px-3 py-2"></th>
-                <th className="px-3 py-2">Description</th>
-                <th className="px-3 py-2">State</th>
-                <th className="px-3 py-2">Pri</th>
-                <th className="px-3 py-2">Assigned</th>
-                <th className="px-3 py-2">Due</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((r, i) => {
-                const overdue = isOverdue(r.dueDate);
-                return (
-                  <tr
-                    key={`${r.number}-${i}`}
-                    className="border-b last:border-0 hover:bg-slate-50"
-                  >
-                    <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">
-                      {r.number ? (
-                        (() => {
-                          const url = buildWorkOrderUrl(r.number, woUrlPattern);
-                          return url ? (
-                            <a
-                              href={url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-brand-600 hover:underline"
-                              title="Open this work order in Nuvolo"
-                            >
-                              {r.number}
-                            </a>
-                          ) : (
-                            r.number
-                          );
-                        })()
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      <button
-                        className="btn-secondary text-xs"
-                        onClick={() => startProjectFromWO(r)}
-                        disabled={!r.number}
-                        title="Open the workboard for this work order. Reuses an existing workboard if you already have one (active or archived) for this FWKD — won't create a duplicate."
-                      >
-                        Open Workboard
-                      </button>
-                    </td>
-                    <td className="px-3 py-2">{r.shortDescription || '—'}</td>
-                    <td className="px-3 py-2">
-                      {r.state && (
-                        <span className="pill bg-slate-100 text-slate-700">
-                          {r.state}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">{r.priority || '—'}</td>
-                    <td className="px-3 py-2 text-xs">{r.assignedTo || '—'}</td>
-                    <td
-                      className={`px-3 py-2 text-xs ${
-                        overdue ? 'text-rose-600 font-medium' : ''
+        {/* Work order cards — single-column responsive layout with
+            colored top bar and clean field grid. No horizontal scroll. */}
+        <div className="space-y-3">
+          {filtered.map((r, i) => {
+            const overdue = isOverdue(r.dueDate);
+            // Status color mapping
+            const stateColor = getStateColor(r.state);
+            return (
+              <div
+                key={`${r.number}-${i}`}
+                className="bg-white rounded-lg border border-slate-200 overflow-hidden"
+              >
+                {/* Thin colored top bar with FWKD / description / status pill */}
+                <div
+                  className={`${stateColor} px-3 py-2 flex items-center justify-between gap-2 flex-wrap`}
+                >
+                  <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                    {r.number ? (
+                      (() => {
+                        const url = buildWorkOrderUrl(r.number, woUrlPattern);
+                        return url ? (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono text-sm font-semibold hover:underline"
+                            title="Open this work order in Nuvolo"
+                          >
+                            {r.number}
+                          </a>
+                        ) : (
+                          <span className="font-mono text-sm font-semibold">
+                            {r.number}
+                          </span>
+                        );
+                      })()
+                    ) : (
+                      <span className="font-mono text-sm text-slate-400">—</span>
+                    )}
+                    <span className="text-sm truncate">
+                      {r.shortDescription || 'No description'}
+                    </span>
+                  </div>
+                  {r.state && (
+                    <span className="pill bg-white/30 backdrop-blur-sm text-inherit text-xs">
+                      {r.state}
+                    </span>
+                  )}
+                </div>
+
+                {/* Fields in clean grid below header */}
+                <div className="p-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-xs text-slate-500">Priority</span>
+                    <div className="font-medium">{r.priority || '—'}</div>
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-500">Assigned to</span>
+                    <div className="font-medium truncate" title={r.assignedTo}>
+                      {r.assignedTo || '—'}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-500">Due date</span>
+                    <div
+                      className={`font-medium ${
+                        overdue ? 'text-rose-600' : ''
                       }`}
                     >
                       {r.dueDate || '—'}
                       {overdue && ' ⚠'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {filtered.length === 0 && (
-            <p className="text-center text-sm text-slate-500 py-6">
-              No rows match your filters.
-            </p>
-          )}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-500">Location</span>
+                    <div className="font-medium truncate" title={r.location}>
+                      {r.location || '—'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action button at bottom */}
+                <div className="px-3 pb-3">
+                  <button
+                    className="btn-secondary text-sm w-full sm:w-auto"
+                    onClick={() => startProjectFromWO(r)}
+                    disabled={!r.number}
+                    title="Open the workboard for this work order. Reuses an existing workboard if you already have one (active or archived) for this FWKD — won't create a duplicate."
+                  >
+                    Open Workboard →
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
+        {filtered.length === 0 && (
+          <p className="text-center text-sm text-slate-500 py-6">
+            No rows match your filters.
+          </p>
+        )}
       </section>
     </div>
   );
