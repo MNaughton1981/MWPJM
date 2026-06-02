@@ -333,7 +333,7 @@ export function projectToOneOnOneSummary(project: Project): string {
   // Infer status tag based on project status and recent activity
   let statusTag = '';
   const daysSinceUpdate = (Date.now() - new Date(project.updatedAt).getTime()) / (1000 * 60 * 60 * 24);
-  if (project.status === 'closed') {
+  if (project.status === 'complete') {
     statusTag = ' - Done';
   } else if (daysSinceUpdate < 3) {
     statusTag = ' - New';

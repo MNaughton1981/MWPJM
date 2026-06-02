@@ -514,7 +514,7 @@ export default function UpdateComposer({ project }: Props) {
                 name="calendarProvider"
                 value="google"
                 checked={settings.calendarProvider === 'google'}
-                onChange={() => useStore.getState().updateSettings({ calendarProvider: 'google' })}
+                onChange={() => useStore.getState().setSettings({ calendarProvider: 'google' })}
               />
               <span>Google Calendar</span>
             </label>
@@ -524,7 +524,7 @@ export default function UpdateComposer({ project }: Props) {
                 name="calendarProvider"
                 value="outlook"
                 checked={settings.calendarProvider === 'outlook'}
-                onChange={() => useStore.getState().updateSettings({ calendarProvider: 'outlook' })}
+                onChange={() => useStore.getState().setSettings({ calendarProvider: 'outlook' })}
               />
               <span>Outlook Calendar</span>
             </label>
