@@ -2,18 +2,12 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { BUILD_TIME } from '../lib/appUpdate';
 import UpdatePrompt from './UpdatePrompt';
 
-// Nav labels:
-//   /dashboard → "Dashboard"  (read-only view of the imported Nuvolo CSV)
-//   /projects  → "Workboards" (the list of personal workboards)
-// Routes are kept as-is to avoid invalidating bookmarks / PWA shortcuts.
-// Order intentionally puts Dashboard first because that's the daily
-// "what's open?" pane; Workboards is where you go *after* picking
-// something off the dashboard or hitting Quick Workboard.
+// Primary nav items. Settings moved to gear icon in header.
 const NAV_ITEMS = [
+  { to: '/', label: 'Home' },
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/projects', label: 'Workboards' },
   { to: '/reports', label: 'Reports' },
-  { to: '/settings', label: 'Settings' },
 ];
 
 export default function Layout() {
@@ -21,7 +15,7 @@ export default function Layout() {
     <div className="min-h-full flex flex-col">
       <header className="safe-top bg-slate-900 text-white sticky top-0 z-30 shadow-md">
         <div className="max-w-5xl mx-auto px-3 sm:px-4 py-3 flex items-center gap-3">
-          <NavLink to="/projects" className="flex items-center gap-2 shrink-0">
+          <NavLink to="/" className="flex items-center gap-2 shrink-0">
             <Logo />
             {/* Hide the wordmark on small screens to give the nav room */}
             <div className="hidden sm:block">
@@ -48,6 +42,36 @@ export default function Layout() {
               </NavLink>
             ))}
           </nav>
+          {/* Settings as gear icon */}
+          <NavLink
+            to="/settings"
+            className={({ isActive }) =>
+              `p-2 rounded-md shrink-0 ${
+                isActive ? 'bg-white/10' : 'hover:bg-white/5'
+              }`
+            }
+            title="Settings"
+            aria-label="Settings"
+          >
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+              />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+              />
+            </svg>
+          </NavLink>
         </div>
       </header>
 
