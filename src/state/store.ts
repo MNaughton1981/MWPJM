@@ -250,6 +250,7 @@ const defaultSettings: Settings = {
   securityCcSelf: true,
   syncEnabled: false,
   syncFilename: 'mwpjm-state.json',
+  calendarProvider: 'outlook', // Default to Outlook Calendar (.ics download)
 };
 
 function touch(p: Project): Project {

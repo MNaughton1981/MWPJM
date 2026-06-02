@@ -4,6 +4,7 @@ import { buildNuvoloMail, isValidWorkOrderId } from '../lib/nuvolo';
 import { useStore } from '../state/store';
 import {
   buildClipboardNote,
+  buildGoogleCalendarUrl,
   buildIcs,
   buildToDoMail,
   copyToClipboard,
@@ -380,20 +381,35 @@ export default function UpdateComposer({ project }: Props) {
       projectName: project.name,
       technicianName: settings.technicianName,
     });
-    const ics = buildIcs({ title, description, start });
-    const safeName = (firstLine || 'reminder')
-      .replace(/[^a-z0-9 -]/gi, '')
-      .replace(/\s+/g, '-')
-      .slice(0, 40)
-      .toLowerCase();
-    downloadIcs(`mwpjm-${safeName}.ics`, ics);
-    logActivity({ postedToNuvolo: false });
-    setShowReminder(false);
-    clearDraft();
-    setToast({
-      kind: 'ok',
-      text: 'Reminder downloaded. Open the .ics file to add to Outlook.',
-    });
+
+    if (settings.calendarProvider === 'google') {
+      // Google Calendar — open calendar.google.com with event pre-filled
+      const url = buildGoogleCalendarUrl({ title, description, start });
+      window.open(url, '_blank', 'noopener,noreferrer');
+      logActivity({ postedToNuvolo: false });
+      setShowReminder(false);
+      clearDraft();
+      setToast({
+        kind: 'ok',
+        text: 'Google Calendar opened. Add the event in the new tab.',
+      });
+    } else {
+      // Outlook Calendar — download .ics file
+      const ics = buildIcs({ title, description, start });
+      const safeName = (firstLine || 'reminder')
+        .replace(/[^a-z0-9 -]/gi, '')
+        .replace(/\s+/g, '-')
+        .slice(0, 40)
+        .toLowerCase();
+      downloadIcs(`mwpjm-${safeName}.ics`, ics);
+      logActivity({ postedToNuvolo: false });
+      setShowReminder(false);
+      clearDraft();
+      setToast({
+        kind: 'ok',
+        text: 'Reminder downloaded. Open the .ics file to add to Outlook.',
+      });
+    }
   }
 
   const hasText = !!text.trim();
@@ -491,9 +507,32 @@ export default function UpdateComposer({ project }: Props) {
             value={reminderAt}
             onChange={(e) => setReminderAt(e.target.value)}
           />
+          <div className="flex items-center gap-3 text-xs">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="radio"
+                name="calendarProvider"
+                value="google"
+                checked={settings.calendarProvider === 'google'}
+                onChange={() => useStore.getState().updateSettings({ calendarProvider: 'google' })}
+              />
+              <span>Google Calendar</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="radio"
+                name="calendarProvider"
+                value="outlook"
+                checked={settings.calendarProvider === 'outlook'}
+                onChange={() => useStore.getState().updateSettings({ calendarProvider: 'outlook' })}
+              />
+              <span>Outlook Calendar</span>
+            </label>
+          </div>
           <p className="text-xs text-slate-500">
-            Downloads an .ics file. Open it (or it auto-opens in Outlook) to
-            add the event with a 15-min reminder alarm.
+            {settings.calendarProvider === 'google'
+              ? 'Opens calendar.google.com with the event pre-filled.'
+              : 'Downloads an .ics file. Open it (or it auto-opens in Outlook) to add the event with a 15-min reminder alarm.'}
           </p>
           <div className="flex justify-end gap-2">
             <button
@@ -503,7 +542,7 @@ export default function UpdateComposer({ project }: Props) {
               Cancel
             </button>
             <button className="btn-primary text-xs" onClick={confirmReminder}>
-              Download .ics
+              {settings.calendarProvider === 'google' ? 'Open Google Calendar' : 'Download .ics'}
             </button>
           </div>
         </div>
