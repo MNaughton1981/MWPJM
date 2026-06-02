@@ -128,14 +128,7 @@ export function buildGoogleCalendarUrl(args: IcsArgs): string {
   
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
-  a.href = url;
-  a.download = filename.endsWith('.ics') ? filename : `${filename}.ics`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1500);
-}
-
+ 
 /**
  * Build a Google Calendar "add event" URL. Opens calendar.google.com
  * with the event pre-filled. No .ics download, no mailto: — just a
