@@ -7,6 +7,7 @@ import type {
   ProjectPhoto,
   ProjectStatus,
   SavedVendor,
+  SavedVendorEvent,
   Settings,
   Trade,
   Vendor,
@@ -47,6 +48,22 @@ interface AppState {
    * saving on desktop = available on mobile.
    */
   savedVendors: SavedVendor[];
+
+  /**
+   * Saved recurring service / vendor event templates — quarterly
+   * drain service, annual fire alarm test, etc. See the
+   * SavedVendorEvent doc on `types.ts` for the full design.
+   *
+   * Surfaced two ways:
+   *   - Workboards page: "📅 Vendor events" entry point opens a
+   *     modal where the user picks an event, fills in the visit
+   *     date/time, and fires a security notification.
+   *   - Settings page: "Vendor events" section to manage templates
+   *     (add / edit / remove).
+   *
+   * Synced cross-device alongside everything else.
+   */
+  savedVendorEvents: SavedVendorEvent[];
 
   /**
    * In-progress Compose Note text, keyed by project id. Lets the user
@@ -155,6 +172,31 @@ interface AppState {
   /** Delete a saved vendor from the book by id. */
   removeSavedVendor: (id: string) => void;
 
+  // Saved vendor events (recurring service / notification templates).
+  /**
+   * Insert a new saved vendor event template. Always creates a fresh
+   * row with a new id (no name-based dedupe — the user explicitly
+   * asked for the ability to rename an event without it spawning a
+   * duplicate). Returns the new id so the caller can navigate to the
+   * edit form right after creation if they want.
+   *
+   * `createdAt` and `updatedAt` are stamped at insert time.
+   */
+  addSavedVendorEvent: (
+    template: Omit<SavedVendorEvent, 'id' | 'createdAt' | 'updatedAt'>,
+  ) => string;
+  /**
+   * Edit an existing saved event in place. Found by id, no name-based
+   * dedupe, so renaming is safe (won't merge or duplicate). Bumps
+   * `updatedAt` on every edit; `createdAt` is preserved.
+   */
+  updateSavedVendorEvent: (
+    id: string,
+    patch: Partial<Omit<SavedVendorEvent, 'id' | 'createdAt'>>,
+  ) => void;
+  /** Delete a saved event by id. */
+  removeSavedVendorEvent: (id: string) => void;
+
   // Settings
   setSettings: (patch: Partial<Settings>) => void;
 
@@ -170,6 +212,7 @@ interface AppState {
     projects: Project[];
     settings: Settings;
     savedVendors?: SavedVendor[];
+    savedVendorEvents?: SavedVendorEvent[];
   }) => void;
 
   /**
@@ -185,6 +228,7 @@ interface AppState {
     settings: Settings;
     workOrders: ImportedWorkOrders | null;
     savedVendors?: SavedVendor[];
+    savedVendorEvents?: SavedVendorEvent[];
     syncedAt: string;
   }) => void;
 }
@@ -221,6 +265,7 @@ export const useStore = create<AppState>()(
       lastSyncedAt: null,
       syncError: null,
       savedVendors: [],
+      savedVendorEvents: [],
       composerDrafts: {},
 
       addProject: (p) =>
@@ -520,6 +565,46 @@ export const useStore = create<AppState>()(
           savedVendors: s.savedVendors.filter((sv) => sv.id !== id),
         })),
 
+      addSavedVendorEvent: (template) => {
+        const now = Date.now();
+        const created: SavedVendorEvent = {
+          id: uid(),
+          name: template.name.trim() || 'Untitled event',
+          cadence: template.cadence?.trim() || undefined,
+          vendorName: template.vendorName?.trim() || undefined,
+          vendorCompany: template.vendorCompany?.trim() || undefined,
+          vendorRole: template.vendorRole?.trim() || undefined,
+          vendorPhone: template.vendorPhone?.trim() || undefined,
+          vendorEmail: template.vendorEmail?.trim() || undefined,
+          serviceDescription: template.serviceDescription?.trim() || undefined,
+          defaultVisitNotes: template.defaultVisitNotes?.trim() || undefined,
+          createdAt: now,
+          updatedAt: now,
+        };
+        set((s) => ({
+          savedVendorEvents: [created, ...s.savedVendorEvents],
+        }));
+        return created.id;
+      },
+
+      updateSavedVendorEvent: (id, patch) =>
+        set((s) => ({
+          savedVendorEvents: s.savedVendorEvents.map((ev) =>
+            ev.id === id
+              ? {
+                  ...ev,
+                  ...patch,
+                  updatedAt: Date.now(),
+                }
+              : ev,
+          ),
+        })),
+
+      removeSavedVendorEvent: (id) =>
+        set((s) => ({
+          savedVendorEvents: s.savedVendorEvents.filter((ev) => ev.id !== id),
+        })),
+
       setSettings: (patch) =>
         set((s) => ({ settings: { ...s.settings, ...patch } })),
 
@@ -545,6 +630,7 @@ export const useStore = create<AppState>()(
           projects: data.projects,
           settings: { ...defaultSettings, ...data.settings },
           savedVendors: data.savedVendors ?? [],
+          savedVendorEvents: data.savedVendorEvents ?? [],
         })),
 
       applySyncedState: (data) =>
@@ -553,6 +639,7 @@ export const useStore = create<AppState>()(
           settings: { ...defaultSettings, ...data.settings },
           workOrders: data.workOrders,
           savedVendors: data.savedVendors ?? [],
+          savedVendorEvents: data.savedVendorEvents ?? [],
           lastSyncedAt: data.syncedAt,
           syncError: null,
         })),
@@ -597,6 +684,11 @@ export const useStore = create<AppState>()(
           // states don't have this key. Calling addOrUpdateSavedVendor
           // before it's seeded would crash on `s.savedVendors.findIndex`.
           savedVendors: p.savedVendors ?? current.savedVendors,
+          // Same defensive backfill for savedVendorEvents — older
+          // persisted states predate this field, so without this
+          // backfill addSavedVendorEvent would spread into undefined.
+          savedVendorEvents:
+            p.savedVendorEvents ?? current.savedVendorEvents,
         };
       },
     },

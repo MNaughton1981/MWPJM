@@ -24,7 +24,7 @@ import {
   readFileFromFolder,
   writeFileToFolder,
 } from './folderConnection';
-import type { Project, SavedVendor, Settings } from '../types';
+import type { Project, SavedVendor, SavedVendorEvent, Settings } from '../types';
 import type { ImportedWorkOrders } from './workOrderCsv';
 
 export const DEFAULT_SYNC_FILENAME = 'mwpjm-state.json';
@@ -49,6 +49,12 @@ export interface SyncPayload {
    * with snapshots written before the vendor book existed.
    */
   savedVendors?: SavedVendor[];
+  /**
+   * Recurring vendor service / event templates. Optional for
+   * backwards-compat with snapshots written before the events
+   * feature existed.
+   */
+  savedVendorEvents?: SavedVendorEvent[];
 }
 
 function buildPayload(): SyncPayload {
@@ -60,6 +66,7 @@ function buildPayload(): SyncPayload {
     settings: state.settings,
     workOrders: state.workOrders,
     savedVendors: state.savedVendors,
+    savedVendorEvents: state.savedVendorEvents,
   };
 }
 
@@ -92,6 +99,9 @@ export function parseSyncPayload(text: string): SyncPayload {
     settings: p.settings as Settings,
     workOrders: (p.workOrders as ImportedWorkOrders | null) ?? null,
     savedVendors: Array.isArray(p.savedVendors) ? p.savedVendors : [],
+    savedVendorEvents: Array.isArray(p.savedVendorEvents)
+      ? p.savedVendorEvents
+      : [],
   };
 }
 
@@ -156,6 +166,7 @@ export function applySyncedState(payload: SyncPayload): void {
     settings: payload.settings,
     workOrders: payload.workOrders,
     savedVendors: payload.savedVendors ?? [],
+    savedVendorEvents: payload.savedVendorEvents ?? [],
     syncedAt: payload.syncedAt,
   });
 }
@@ -197,7 +208,8 @@ export function startAutoSync(
       state.projects === prev.projects &&
       state.settings === prev.settings &&
       state.workOrders === prev.workOrders &&
-      state.savedVendors === prev.savedVendors;
+      state.savedVendors === prev.savedVendors &&
+      state.savedVendorEvents === prev.savedVendorEvents;
     if (persistedSliceUnchanged) return;
 
     if (timer !== null) window.clearTimeout(timer);
