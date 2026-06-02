@@ -206,6 +206,39 @@ export default function SettingsPage() {
             Microsoft To Do's "Flagged email" list.
           </p>
         </div>
+        <div>
+          <label className="label">
+            Calendar provider (for "📅 Reminder" button)
+          </label>
+          <div className="flex items-center gap-4 mt-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="calendarProvider"
+                value="outlook"
+                checked={settings.calendarProvider === 'outlook'}
+                onChange={() => setSettings({ calendarProvider: 'outlook' })}
+                className="h-4 w-4 text-brand-600 focus:ring-brand-500"
+              />
+              <span className="text-sm">Outlook Calendar (.ics download)</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="calendarProvider"
+                value="google"
+                checked={settings.calendarProvider === 'google'}
+                onChange={() => setSettings({ calendarProvider: 'google' })}
+                className="h-4 w-4 text-brand-600 focus:ring-brand-500"
+              />
+              <span className="text-sm">Google Calendar (web link)</span>
+            </label>
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            Outlook downloads an .ics file that auto-opens in Outlook desktop.
+            Google opens calendar.google.com with the event pre-filled.
+          </p>
+        </div>
       </section>
 
       <section id="sec-nuvolo" className="card p-4 space-y-3 scroll-mt-20">

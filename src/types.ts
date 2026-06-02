@@ -311,6 +311,13 @@ export interface Settings {
    * the user's CSV exports — OneDrive doesn't care.
    */
   syncFilename: string;
+  /**
+   * User's preferred calendar provider for Reminder .ics files.
+   * 'google' = Google Calendar (https://calendar.google.com URL),
+   * 'outlook' = Outlook Calendar (.ics download).
+   * Defaults to 'outlook'.
+   */
+  calendarProvider: 'google' | 'outlook';
 }
 
 export interface AppData {
