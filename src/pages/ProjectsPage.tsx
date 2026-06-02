@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useStore } from '../state/store';
 import { TEMPLATES } from '../data/templates';
 import { PROJECT_STATUS_LABELS } from '../types';
 import { formatDateTime, workboardNumber } from '../lib/format';
+import { allProjectsToOneOnOneSummary } from '../lib/exporters';
 import SyncQuickActions from '../components/SyncQuickActions';
 
 /**
@@ -25,14 +26,31 @@ import SyncQuickActions from '../components/SyncQuickActions';
 
 export default function ProjectsPage() {
   const projects = useStore((s) => s.projects);
+  const workOrders = useStore((s) => s.workOrders);
   const addProject = useStore((s) => s.addProject);
   const unarchiveProject = useStore((s) => s.unarchiveProject);
   const togglePinProject = useStore((s) => s.togglePinProject);
   const navigate = useNavigate();
+  const location = useLocation();
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState('');
   const [templateId, setTemplateId] = useState(TEMPLATES[0].id);
   const [showArchived, setShowArchived] = useState(false);
+  const [exportStatus, setExportStatus] = useState('');
+
+  // Handle navigation state actions from HomePage launchers
+  useEffect(() => {
+    const state = location.state as { action?: string } | null;
+    if (!state?.action) return;
+    
+    if (state.action === 'export1on1') {
+      // Automatically trigger the 1:1 export when navigating from the "1:1 Manager" launcher
+      exportAll1on1Summaries();
+      // Clear the action from location state so it doesn't re-trigger on refresh
+      navigate(location.pathname, { replace: true });
+    }
+    // Handle other actions (quick, new, events) if they exist...
+  }, [location.state]);
 
 
   const archivedCount = useMemo(
@@ -102,6 +120,24 @@ export default function ProjectsPage() {
   }
 
   /**
+   * Bulk export: all active workboards merged with Nuvolo CSV data.
+   * Copies the combined summary to clipboard ready for pasting into
+   * meeting notes or sending to Copilot for executive summary generation.
+   */
+  async function exportAll1on1Summaries() {
+    const summary = allProjectsToOneOnOneSummary(projects, workOrders);
+    try {
+      await navigator.clipboard.writeText(summary);
+      const activeCount = projects.filter(p => !p.archivedAt).length;
+      setExportStatus(`✓ Copied ${activeCount} workboard${activeCount !== 1 ? 's' : ''} to clipboard`);
+      setTimeout(() => setExportStatus(''), 4000);
+    } catch {
+      setExportStatus('✗ Clipboard not available');
+      setTimeout(() => setExportStatus(''), 4000);
+    }
+  }
+
+  /**
    * One-tap unarchive from the archived list. Doesn't navigate —
    * the row just disappears from the archived view (since it's no
    * longer archived). User can flip back to active to see it.
@@ -143,6 +179,15 @@ export default function ProjectsPage() {
               the device — only renders the buttons that can actually
               do something there. */}
           <SyncQuickActions />
+          {!showArchived && sorted.length > 0 && (
+            <button
+              className="btn-secondary text-xs"
+              onClick={exportAll1on1Summaries}
+              title="Export all active workboards merged with Nuvolo CSV data — ready for meeting notes or Copilot summary"
+            >
+              📄 Export All 1:1
+            </button>
+          )}
           <button
             className="btn-primary"
             onClick={createQuickWorkboard}
@@ -159,6 +204,12 @@ export default function ProjectsPage() {
           </button>
         </div>
       </div>
+
+      {exportStatus && (
+        <div className="card p-3 bg-brand-50 border-brand-200 text-sm text-brand-800">
+          {exportStatus}
+        </div>
+      )}
 
       {showNew && (
         <div className="card p-4 space-y-3">

@@ -86,6 +86,22 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* === Section: Meeting Prep === */}
+      <section>
+        <h2 className="text-xs uppercase tracking-wide text-slate-500 font-semibold mb-3">
+          Meeting Prep
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <LauncherButton
+            to="/projects"
+            icon="👥"
+            label="1:1 Manager"
+            description={`Export all ${activeCount} workboard${activeCount === 1 ? '' : 's'} merged with Nuvolo data`}
+            state={{ action: 'export1on1' }}
+          />
+        </div>
+      </section>
+
       {/* === Section: Communication === */}
       <section>
         <h2 className="text-xs uppercase tracking-wide text-slate-500 font-semibold mb-3">

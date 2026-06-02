@@ -1,4 +1,5 @@
 import type { AppData, Project, SavedVendor, SavedVendorEvent, Settings } from '../types';
+import type { WorkOrder } from './workOrderCsv';
 import {
   PROJECT_STATUS_LABELS,
   STATUS_LABELS,
@@ -319,11 +320,13 @@ export function projectToHtml(project: Project): string {
  * section. Format mirrors the user's existing template:
  * 
  * - FWKD0012345 - Short description - Status tag
- *   - Summary text
+ *   - Nuvolo system data (if workOrder provided)
+ *   - Nuvolo notes (if workOrder provided)
+ *   - Workboard summary text
  *   - Recent activity / next steps
  *   - Vendor info if applicable
  */
-export function projectToOneOnOneSummary(project: Project): string {
+export function projectToOneOnOneSummary(project: Project, workOrder?: WorkOrder): string {
   const lines: string[] = [];
   
   // Header: FWKD - Description - Status tag (New/No Change/Done)
@@ -344,6 +347,55 @@ export function projectToOneOnOneSummary(project: Project): string {
   // If recent activity but not new/done, leave blank (implies active work)
   
   lines.push(`○ ${fwkd} - ${desc}${statusTag}`);
+  lines.push(''); // Blank line after header
+  
+  // [NUVOLO SYSTEM DATA] - Core fields from CSV
+  if (workOrder) {
+    const systemData: string[] = [];
+    if (workOrder.state) systemData.push(`State: ${workOrder.state}`);
+    if (workOrder.priority) systemData.push(`Priority: ${workOrder.priority}`);
+    if (workOrder.assignedTo) systemData.push(`Assigned: ${workOrder.assignedTo}`);
+    
+    if (systemData.length > 0) {
+      lines.push('\t§ ' + systemData.join(' | '));
+    }
+    
+    const dates: string[] = [];
+    if (workOrder.openedAt) dates.push(`Opened: ${formatDate(workOrder.openedAt)}`);
+    if (workOrder.dueDate) dates.push(`Due: ${formatDate(workOrder.dueDate)}`);
+    if (dates.length > 0) {
+      lines.push('\t§ ' + dates.join(' | '));
+    }
+    
+    if (workOrder.location) {
+      lines.push(`\t§ Location: ${workOrder.location}`);
+    }
+    
+    // [NUVOLO NOTES] - Extract notes/comments from extra fields
+    // Common ServiceNow/Nuvolo fields that contain activity/comments
+    const notesFields = ['work_notes', 'comments', 'close_notes', 'work_notes_list', 'description'];
+    const nuvoloNotes: string[] = [];
+    
+    for (const field of notesFields) {
+      const value = workOrder.extra[field];
+      if (value && value.trim()) {
+        // Split multi-line notes and clean up
+        const noteLines = value.split('\n')
+          .map(l => l.trim())
+          .filter(l => l.length > 0);
+        nuvoloNotes.push(...noteLines);
+      }
+    }
+    
+    if (nuvoloNotes.length > 0) {
+      lines.push(''); // Spacing
+      nuvoloNotes.slice(0, 5).forEach(note => {
+        lines.push(`\t§ ${note}`);
+      });
+    }
+    
+    lines.push(''); // Spacing before workboard data
+  }
   
   // Description / summary
   if (project.description) {
@@ -351,12 +403,13 @@ export function projectToOneOnOneSummary(project: Project): string {
     summaryLines.forEach(line => {
       lines.push(`\t§ ${line.trim()}`);
     });
+    lines.push(''); // Spacing after description
   }
   
-  // Recent activity (most recent 3 entries)
+  // Recent activity (most recent 5 entries for bulk export, was 3 before)
   const recentActivity = [...project.activity]
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, 3);
+    .slice(0, 5);
   
   if (recentActivity.length > 0) {
     recentActivity.forEach(a => {
@@ -367,6 +420,7 @@ export function projectToOneOnOneSummary(project: Project): string {
         lines.push(`${prefix}${line.trim()}`);
       });
     });
+    lines.push(''); // Spacing after activity
   }
   
   // Vendors on-site (if any with visit dates)
@@ -379,18 +433,20 @@ export function projectToOneOnOneSummary(project: Project): string {
       const visitTime = v.visitTime ? ` at ${v.visitTime}` : '';
       lines.push(`\t§ ${v.name}${company} on-site ${visitDate}${visitTime}`);
     });
+    lines.push(''); // Spacing after vendors
   }
   
-  // Upcoming milestones (incomplete only, max 2)
+  // Upcoming milestones (incomplete only, max 3 for bulk export)
   const upcomingMilestones = project.milestones
     .filter(m => !m.done)
-    .slice(0, 2);
+    .slice(0, 3);
   if (upcomingMilestones.length > 0) {
     lines.push(`\t§ Next steps:`);
     upcomingMilestones.forEach(m => {
       const date = m.date ? ` (${formatDate(m.date)})` : '';
       lines.push(`\t\t• ${m.title}${date}`);
     });
+    lines.push(''); // Spacing after milestones
   }
   
   // Photos note if any exist
@@ -399,6 +455,106 @@ export function projectToOneOnOneSummary(project: Project): string {
     lines.push(`\t§ ${photos.length} photo${photos.length !== 1 ? 's' : ''} attached to workboard`);
   }
   
-  lines.push(''); // Blank line for spacing
+  lines.push(''); // Blank line for spacing between projects
   return lines.join('\n');
+}
+
+/**
+ * Bulk export: All active workboards merged with Nuvolo CSV data.
+ * 
+ * Groups by FWKD, cross-references workboard activity with Nuvolo system
+ * notes, outputs in a format ready for executive summary generation.
+ * 
+ * Sorting logic:
+ * - Projects with FWKDs: sorted by FWKD number (ascending)
+ * - Projects without FWKDs: alphabetically by name, at the end
+ * 
+ * @param projects - Array of all projects (will filter to active only)
+ * @param workOrders - Imported Nuvolo CSV data (optional)
+ * @returns Formatted text ready to copy/paste into meeting notes or send to Copilot
+ */
+export function allProjectsToOneOnOneSummary(
+  projects: Project[],
+  workOrders: { rows: WorkOrder[] } | null,
+): string {
+  const output: string[] = [];
+  const now = new Date().toISOString();
+  
+  // Header
+  output.push('═══════════════════════════════════════════════');
+  output.push('ALL ACTIVE WORKBOARDS - 1:1 SUMMARY');
+  output.push(`Generated: ${formatDateTime(now)}`);
+  output.push('═══════════════════════════════════════════════');
+  output.push('');
+  
+  // Filter to active (non-archived) projects only
+  const activeProjects = projects.filter(p => !p.archivedAt);
+  
+  if (activeProjects.length === 0) {
+    output.push('(No active workboards)');
+    return output.join('\n');
+  }
+  
+  // Build a map of FWKD → WorkOrder for fast lookup
+  const woMap = new Map<string, WorkOrder>();
+  if (workOrders) {
+    for (const wo of workOrders.rows) {
+      const fwkd = wo.number?.toUpperCase().trim();
+      if (fwkd) {
+        woMap.set(fwkd, wo);
+      }
+    }
+  }
+  
+  // Separate projects into two groups: with FWKDs and without
+  const withFwkd: Array<{ project: Project; fwkd: string }> = [];
+  const withoutFwkd: Project[] = [];
+  
+  for (const p of activeProjects) {
+    const fwkd = p.workOrderId?.toUpperCase().trim();
+    if (fwkd) {
+      withFwkd.push({ project: p, fwkd });
+    } else {
+      withoutFwkd.push(p);
+    }
+  }
+  
+  // Sort projects with FWKDs by FWKD number (extract numeric part for natural sort)
+  withFwkd.sort((a, b) => {
+    const aNum = parseInt(a.fwkd.replace(/\D/g, ''), 10) || 0;
+    const bNum = parseInt(b.fwkd.replace(/\D/g, ''), 10) || 0;
+    if (aNum !== bNum) return aNum - bNum;
+    return a.fwkd.localeCompare(b.fwkd); // Fallback to string compare
+  });
+  
+  // Sort projects without FWKDs alphabetically by name
+  withoutFwkd.sort((a, b) => a.name.localeCompare(b.name));
+  
+  // Export projects with FWKDs first (cross-referenced with Nuvolo data)
+  for (const { project, fwkd } of withFwkd) {
+    const wo = woMap.get(fwkd);
+    output.push(projectToOneOnOneSummary(project, wo));
+  }
+  
+  // Then export projects without FWKDs
+  if (withoutFwkd.length > 0) {
+    if (withFwkd.length > 0) {
+      output.push('─────────────────────────────────────────────');
+      output.push('PROJECTS WITHOUT FWKD');
+      output.push('─────────────────────────────────────────────');
+      output.push('');
+    }
+    for (const project of withoutFwkd) {
+      output.push(projectToOneOnOneSummary(project));
+    }
+  }
+  
+  // Footer with summary stats
+  output.push('═══════════════════════════════════════════════');
+  output.push(`Total: ${activeProjects.length} active workboard${activeProjects.length !== 1 ? 's' : ''}`);
+  output.push(`  • ${withFwkd.length} with FWKD${woMap.size > 0 ? ` (${withFwkd.filter(p => woMap.has(p.fwkd)).length} matched to Nuvolo CSV)` : ''}`);
+  output.push(`  • ${withoutFwkd.length} without FWKD`);
+  output.push('═══════════════════════════════════════════════');
+  
+  return output.join('\n');
 }
