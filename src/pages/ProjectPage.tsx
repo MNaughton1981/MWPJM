@@ -18,6 +18,7 @@ import {
   downloadText,
   projectToHtml,
   projectToMarkdown,
+  projectToOneOnOneSummary,
 } from '../lib/exporters';
 import { copyRichText } from '../lib/destinations';
 
@@ -113,6 +114,20 @@ export default function ProjectPage() {
     const md = projectToMarkdown(project!);
     const safeName = project!.name.replace(/[^a-z0-9-_]+/gi, '-').toLowerCase();
     downloadText(`${safeName}-${new Date().toISOString().slice(0, 10)}.md`, md);
+  }
+
+  // One-on-one summary: concise format designed to paste into the
+  // "Repair/Project status by location" section of meeting notes.
+  // Copies plain text to clipboard (not rich HTML) so it pastes
+  // cleanly into the existing template structure.
+  async function exportOneOnOneSummary() {
+    const summary = projectToOneOnOneSummary(project!);
+    try {
+      await navigator.clipboard.writeText(summary);
+      setCopyStatus('1:1 summary copied — paste into your meeting notes.');
+    } catch {
+      setCopyStatus('Copy failed — clipboard not available.');
+    }
   }
 
   function confirmDelete() {
@@ -345,6 +360,13 @@ export default function ProjectPage() {
               {copyStatus}
             </span>
           )}
+          <button
+            className="btn-secondary text-xs"
+            onClick={exportOneOnOneSummary}
+            title="Copy concise summary for pasting into your one-on-one meeting notes (location section format)"
+          >
+            📄 1:1 Summary
+          </button>
           <button
             className="btn-secondary text-xs"
             onClick={exportSummary}

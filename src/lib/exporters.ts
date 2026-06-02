@@ -311,3 +311,94 @@ export function projectToHtml(project: Project): string {
   // OneNote / Word's own typography, not impose our own.
   return `<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">${parts.join('\n')}</div>`;
 }
+
+/**
+ * Concise summary formatted for copy/paste into one-on-one meeting notes.
+ * 
+ * Designed to fit under a location bullet in the "Repair/Project status by location"
+ * section. Format mirrors the user's existing template:
+ * 
+ * - FWKD0012345 - Short description - Status tag
+ *   - Summary text
+ *   - Recent activity / next steps
+ *   - Vendor info if applicable
+ */
+export function projectToOneOnOneSummary(project: Project): string {
+  const lines: string[] = [];
+  
+  // Header: FWKD - Description - Status tag (New/No Change/Done)
+  const fwkd = project.workOrderId || 'No FWKD';
+  const desc = project.name;
+  
+  // Infer status tag based on project status and recent activity
+  let statusTag = '';
+  const daysSinceUpdate = (Date.now() - new Date(project.updatedAt).getTime()) / (1000 * 60 * 60 * 24);
+  if (project.status === 'closed') {
+    statusTag = ' - Done';
+  } else if (daysSinceUpdate < 3) {
+    statusTag = ' - New';
+  } else if (daysSinceUpdate > 7) {
+    // No recent activity
+    statusTag = ' - No Change';
+  }
+  // If recent activity but not new/done, leave blank (implies active work)
+  
+  lines.push(`○ ${fwkd} - ${desc}${statusTag}`);
+  
+  // Description / summary
+  if (project.description) {
+    const summaryLines = project.description.split('\n').filter(l => l.trim());
+    summaryLines.forEach(line => {
+      lines.push(`\t§ ${line.trim()}`);
+    });
+  }
+  
+  // Recent activity (most recent 3 entries)
+  const recentActivity = [...project.activity]
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 3);
+  
+  if (recentActivity.length > 0) {
+    recentActivity.forEach(a => {
+      const dateStr = formatDate(a.timestamp);
+      const activityLines = a.text.split('\n').filter(l => l.trim());
+      activityLines.forEach((line, idx) => {
+        const prefix = idx === 0 ? `\t§ ${dateStr}: ` : '\t\t';
+        lines.push(`${prefix}${line.trim()}`);
+      });
+    });
+  }
+  
+  // Vendors on-site (if any with visit dates)
+  const vendors = project.vendors ?? [];
+  const visitedVendors = vendors.filter(v => v.name && v.visitDate);
+  if (visitedVendors.length > 0) {
+    visitedVendors.forEach(v => {
+      const company = v.company ? ` (${v.company})` : '';
+      const visitDate = v.visitDate ? formatDate(v.visitDate) : '';
+      const visitTime = v.visitTime ? ` at ${v.visitTime}` : '';
+      lines.push(`\t§ ${v.name}${company} on-site ${visitDate}${visitTime}`);
+    });
+  }
+  
+  // Upcoming milestones (incomplete only, max 2)
+  const upcomingMilestones = project.milestones
+    .filter(m => !m.done)
+    .slice(0, 2);
+  if (upcomingMilestones.length > 0) {
+    lines.push(`\t§ Next steps:`);
+    upcomingMilestones.forEach(m => {
+      const date = m.date ? ` (${formatDate(m.date)})` : '';
+      lines.push(`\t\t• ${m.title}${date}`);
+    });
+  }
+  
+  // Photos note if any exist
+  const photos = project.photos ?? [];
+  if (photos.length > 0) {
+    lines.push(`\t§ ${photos.length} photo${photos.length !== 1 ? 's' : ''} attached to workboard`);
+  }
+  
+  lines.push(''); // Blank line for spacing
+  return lines.join('\n');
+}
