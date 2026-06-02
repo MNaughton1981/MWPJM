@@ -35,6 +35,7 @@ const TOC_ITEMS: PageTOCItem[] = [
   { id: 'sec-photos', label: 'Photo naming pattern', icon: '🖼️' },
   { id: 'sec-sync', label: 'Sync state via OneDrive', icon: '🔄' },
   { id: 'sec-vendor-book', label: 'Vendor book', icon: '📒' },
+  { id: 'sec-vendor-events', label: 'Vendor events', icon: '📅' },
   { id: 'sec-backup', label: 'Manual backup', icon: '💾' },
   { id: 'sec-about', label: 'About', icon: 'ℹ️' },
 ];
@@ -48,6 +49,8 @@ export default function SettingsPage() {
   const syncError = useStore((s) => s.syncError);
   const savedVendors = useStore((s) => s.savedVendors);
   const removeSavedVendor = useStore((s) => s.removeSavedVendor);
+  const savedVendorEvents = useStore((s) => s.savedVendorEvents);
+  const removeSavedVendorEvent = useStore((s) => s.removeSavedVendorEvent);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const syncFileRef = useRef<HTMLInputElement>(null);
@@ -62,7 +65,7 @@ export default function SettingsPage() {
   }, []);
 
   function exportBackup() {
-    const data = buildAppData(projects, settings, savedVendors);
+    const data = buildAppData(projects, settings, savedVendors, savedVendorEvents);
     downloadJson(`mwpjm-backup-${new Date().toISOString().slice(0, 10)}.json`, data);
   }
 
@@ -72,7 +75,11 @@ export default function SettingsPage() {
       const ok = window.confirm(
         `Import ${data.projects.length} project(s)${
           data.savedVendors?.length
-            ? ` and ${data.savedVendors.length} saved vendor(s)`
+            ? `, ${data.savedVendors.length} saved vendor(s)`
+            : ''
+        }${
+          data.savedVendorEvents?.length
+            ? `, ${data.savedVendorEvents.length} saved event(s)`
             : ''
         }? This will REPLACE your current local data.`,
       );
@@ -81,6 +88,7 @@ export default function SettingsPage() {
         projects: data.projects,
         settings: data.settings ?? settings,
         savedVendors: data.savedVendors ?? [],
+        savedVendorEvents: data.savedVendorEvents ?? [],
       });
       setImportMsg(`Imported ${data.projects.length} project(s).`);
     } catch (e) {
@@ -542,6 +550,87 @@ export default function SettingsPage() {
             ))}
           </ul>
         )}
+      </section>
+
+      <section id="sec-vendor-events" className="card p-4 space-y-3 scroll-mt-20">
+        <div>
+          <h2 className="font-semibold">Vendor events</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Saved templates for recurring vendor services — quarterly
+            drain cleaning, annual fire alarm test, monthly elevator
+            inspection. Open from the Workboards page via{' '}
+            <strong>📅 Vendor events</strong>: pick the event, fill in
+            the visit date / time, and fire a security notification
+            with one tap. Editing the event name (or any other field)
+            updates the same row, so renaming a service never spawns
+            a duplicate. Synced cross-device alongside everything else.
+          </p>
+        </div>
+        {savedVendorEvents.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            No saved events yet. Open Workboards →{' '}
+            <strong>📅 Vendor events</strong> →{' '}
+            <strong>+ New event</strong> to create your first one.
+          </p>
+        ) : (
+          <ul className="divide-y divide-slate-200">
+            {savedVendorEvents
+              .slice()
+              .sort((a, b) => b.updatedAt - a.updatedAt)
+              .map((ev) => (
+                <li
+                  key={ev.id}
+                  className="py-2 flex items-start justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <div className="font-medium truncate flex items-center gap-2">
+                      📅 {ev.name}
+                      {ev.cadence && (
+                        <span className="pill bg-slate-100 text-slate-700 text-[10px] font-normal">
+                          {ev.cadence}
+                        </span>
+                      )}
+                    </div>
+                    {ev.vendorName && (
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {ev.vendorName}
+                        {ev.vendorCompany && ` — ${ev.vendorCompany}`}
+                        {ev.vendorPhone && ` · ${ev.vendorPhone}`}
+                      </div>
+                    )}
+                    {ev.serviceDescription && (
+                      <div className="text-xs text-slate-600 mt-0.5 italic">
+                        {ev.serviceDescription}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-ghost text-xs text-rose-600 shrink-0"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Delete the saved event "${ev.name}"?\n\nThis only removes the template — no security emails are recalled.`,
+                        )
+                      ) {
+                        removeSavedVendorEvent(ev.id);
+                      }
+                    }}
+                    title="Delete this saved event template"
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+          </ul>
+        )}
+        <p className="text-[11px] text-slate-500">
+          To edit fields on an existing event (rename, change vendor info,
+          update the service description, etc.), open it from{' '}
+          <strong>Workboards → 📅 Vendor events</strong> and tap{' '}
+          <strong>✎ Edit template</strong>. Editing in place — no
+          duplicates spawned.
+        </p>
       </section>
 
       <section id="sec-backup" className="card p-4 space-y-3 scroll-mt-20">

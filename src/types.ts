@@ -125,6 +125,67 @@ export interface SavedVendor {
 }
 
 /**
+ * A recurring vendor service / event template — quarterly drain
+ * service, annual fire alarm test, monthly elevator inspection, etc.
+ * Stored at the app level (not per-workboard) so the user can
+ * "easily push a new notification" each time the service is on the
+ * horizon, without re-typing the vendor + service info.
+ *
+ * Key design points:
+ *   - **Stable id, in-place edit by id.** Renaming "fitness center
+ *     drain service" → "fitness center floor drain service" updates
+ *     the same row. No name-based dedupe (avoids the bug where editing
+ *     a name silently spawns a duplicate event).
+ *   - **Snapshot vendor info, not a live link to the Vendor Book.**
+ *     Keeps the event self-contained and predictable. If a vendor's
+ *     phone changes, the user edits the event template directly.
+ *     Simpler than a soft-link with fallback for v1.
+ *   - **Standalone notification trigger.** Firing an event opens the
+ *     security-team notification mailto: directly with the event's
+ *     vendor + service description and the user's just-entered visit
+ *     date/time. No workboard is created — this is pure coordination
+ *     work, not the kind of project that needs photo documentation.
+ *
+ * Synced cross-device alongside projects/settings/savedVendors so
+ * "save event on desktop" → "fire it on mobile next quarter" works.
+ */
+export interface SavedVendorEvent {
+  id: string;
+  /** "Q2 fitness center floor drain service" */
+  name: string;
+  /**
+   * Free-form cadence / frequency hint, e.g. "Quarterly", "Annual",
+   * "As needed". Display-only — there's no scheduler tied to this
+   * field, the user fires the notification manually when the work
+   * is confirmed.
+   */
+  cadence?: string;
+  // Vendor snapshot — flat fields rather than a nested Vendor so the
+  // event can be edited / displayed without the visit-specific bits.
+  vendorName?: string;
+  vendorCompany?: string;
+  vendorRole?: string;
+  vendorPhone?: string;
+  vendorEmail?: string;
+  /**
+   * Description of the service being performed — surfaces in the
+   * security notification so the security team understands what
+   * the visit is for. Prepended to the per-fire notes block.
+   */
+  serviceDescription?: string;
+  /**
+   * Default visit notes that don't change between fires (access
+   * instructions, "go to the loading dock", "Tom has the master
+   * key", etc.). Combined with any per-fire addendum the user types
+   * at fire time.
+   */
+  defaultVisitNotes?: string;
+  /** Epoch ms — used for sort order in the events list (newest first). */
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
  * Photo metadata. Binary data is stored separately in IndexedDB
  * (see src/lib/photoStorage.ts) keyed by `${projectId}/${photoId}`.
  */
@@ -262,6 +323,12 @@ export interface AppData {
    * book feature. Importers should default to `[]` when missing.
    */
   savedVendors?: SavedVendor[];
+  /**
+   * Optional in the AppData JSON — older backups predate the saved
+   * vendor events feature. Importers should default to `[]` when
+   * missing.
+   */
+  savedVendorEvents?: SavedVendorEvent[];
 }
 
 export const TRADE_LABELS: Record<TradeKey, string> = {
