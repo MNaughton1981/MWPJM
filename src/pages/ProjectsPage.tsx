@@ -6,6 +6,7 @@ import { TEMPLATES } from '../data/templates';
 import { PROJECT_STATUS_LABELS } from '../types';
 import { formatDateTime, workboardNumber } from '../lib/format';
 import { allProjectsToOneOnOneSummary } from '../lib/exporters';
+import { parseWorkOrderFile, applyColumnMap, autoDetectColumns } from '../lib/workOrderCsv';
 import SyncQuickActions from '../components/SyncQuickActions';
 
 /**
@@ -26,7 +27,10 @@ import SyncQuickActions from '../components/SyncQuickActions';
 
 export default function ProjectsPage() {
   const projects = useStore((s) => s.projects);
-  const workOrders = useStore((s) => s.workOrders);
+  const meetingNotesOrders = useStore((s) => s.meetingNotesOrders);
+  const setMeetingNotesOrders = useStore((s) => s.setMeetingNotesOrders);
+  const settings = useStore((s) => s.settings);
+  const setSettings = useStore((s) => s.setSettings);
   const addProject = useStore((s) => s.addProject);
   const unarchiveProject = useStore((s) => s.unarchiveProject);
   const togglePinProject = useStore((s) => s.togglePinProject);
@@ -37,6 +41,7 @@ export default function ProjectsPage() {
   const [templateId, setTemplateId] = useState(TEMPLATES[0].id);
   const [showArchived, setShowArchived] = useState(false);
   const [exportStatus, setExportStatus] = useState('');
+  const [showMeetingNotesImport, setShowMeetingNotesImport] = useState(false);
 
   // Handle navigation state actions from HomePage launchers
   useEffect(() => {
@@ -120,12 +125,16 @@ export default function ProjectsPage() {
   }
 
   /**
-   * Bulk export: all active workboards merged with Nuvolo CSV data.
+   * Bulk export: all active workboards merged with meeting notes CSV data.
    * Copies the combined summary to clipboard ready for pasting into
    * meeting notes or sending to Copilot for executive summary generation.
+   * 
+   * Uses meetingNotesOrders (closed/historical tickets) instead of workOrders
+   * (daily active tickets) so the user can load a filtered export without
+   * interfering with the Dashboard.
    */
   async function exportAll1on1Summaries() {
-    const summary = allProjectsToOneOnOneSummary(projects, workOrders);
+    const summary = allProjectsToOneOnOneSummary(projects, meetingNotesOrders);
     try {
       await navigator.clipboard.writeText(summary);
       const activeCount = projects.filter(p => !p.archivedAt).length;
@@ -135,6 +144,43 @@ export default function ProjectsPage() {
       setExportStatus('✗ Clipboard not available');
       setTimeout(() => setExportStatus(''), 4000);
     }
+  }
+
+  /**
+   * Import a meeting notes CSV (closed/historical work orders).
+   * Stored separately from the daily active work orders so the user
+   * can filter to closed tickets over a specific date range for
+   * meeting prep without overwriting the Dashboard.
+   */
+  async function handleMeetingNotesFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const { headers, rows } = await parseWorkOrderFile(file);
+      if (rows.length === 0) {
+        setExportStatus('✗ No rows found in file');
+        setTimeout(() => setExportStatus(''), 4000);
+        return;
+      }
+      const columnMap = autoDetectColumns(headers);
+      const workOrderRows = applyColumnMap(rows, columnMap);
+      setMeetingNotesOrders({
+        importedAt: new Date().toISOString(),
+        sourceFilename: file.name,
+        rawHeaders: headers,
+        columnMap,
+        rows: workOrderRows,
+      });
+      setSettings({ meetingNotesFilename: file.name });
+      setShowMeetingNotesImport(false);
+      setExportStatus(`✓ Loaded ${workOrderRows.length} work order${workOrderRows.length !== 1 ? 's' : ''} from ${file.name}`);
+      setTimeout(() => setExportStatus(''), 6000);
+    } catch (err) {
+      setExportStatus(`✗ Import failed: ${(err as Error).message}`);
+      setTimeout(() => setExportStatus(''), 6000);
+    }
+    // Reset the file input so the user can re-select the same file if needed
+    e.target.value = '';
   }
 
   /**
@@ -180,13 +226,24 @@ export default function ProjectsPage() {
               do something there. */}
           <SyncQuickActions />
           {!showArchived && sorted.length > 0 && (
-            <button
-              className="btn-secondary text-xs"
-              onClick={exportAll1on1Summaries}
-              title="Export all active workboards merged with Nuvolo CSV data — ready for meeting notes or Copilot summary"
-            >
-              📄 Export All 1:1
-            </button>
+            <>
+              <button
+                className="btn-ghost text-xs"
+                onClick={() => setShowMeetingNotesImport(v => !v)}
+                title="Load a filtered CSV (closed work orders) for meeting prep"
+              >
+                {meetingNotesOrders ? '✓ CSV Loaded' : '📁 Load Meeting CSV'}
+              </button>
+              <button
+                className="btn-secondary text-xs"
+                onClick={exportAll1on1Summaries}
+                title={meetingNotesOrders 
+                  ? "Export all active workboards merged with loaded CSV data" 
+                  : "Export all active workboards (without Nuvolo cross-reference — load CSV first)"}
+              >
+                📄 Export All 1:1
+              </button>
+            </>
           )}
           <button
             className="btn-primary"
@@ -208,6 +265,44 @@ export default function ProjectsPage() {
       {exportStatus && (
         <div className="card p-3 bg-brand-50 border-brand-200 text-sm text-brand-800">
           {exportStatus}
+        </div>
+      )}
+
+      {showMeetingNotesImport && (
+        <div className="card p-4 space-y-3 bg-blue-50 border-blue-200">
+          <div>
+            <h3 className="font-semibold text-blue-900 mb-1">Load Meeting Notes CSV</h3>
+            <p className="text-sm text-blue-700">
+              Load a filtered Nuvolo export (closed work orders over a specific date range) 
+              to cross-reference with your workboard activity for 1:1 meetings. This won't 
+              overwrite the Dashboard's daily active work orders.
+            </p>
+          </div>
+          <div>
+            <label className="btn-secondary text-sm cursor-pointer inline-flex items-center gap-2">
+              <span>📁 Choose File...</span>
+              <input
+                type="file"
+                accept=".csv,.xlsx,.xls,.json"
+                onChange={handleMeetingNotesFileSelect}
+                className="hidden"
+              />
+            </label>
+            {settings.meetingNotesFilename && (
+              <p className="text-xs text-blue-600 mt-2">
+                Currently loaded: <span className="font-mono">{settings.meetingNotesFilename}</span>
+                {meetingNotesOrders && ` (${meetingNotesOrders.rows.length} rows)`}
+              </p>
+            )}
+          </div>
+          <div className="flex justify-end">
+            <button
+              className="btn-ghost text-xs"
+              onClick={() => setShowMeetingNotesImport(false)}
+            >
+              Close
+            </button>
+          </div>
         </div>
       )}
 

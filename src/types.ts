@@ -318,6 +318,14 @@ export interface Settings {
    * Defaults to 'outlook'.
    */
   calendarProvider: 'google' | 'outlook';
+  /**
+   * Optional: Last imported meeting notes CSV filename (display only).
+   * Used by the 1:1 Manager to show what closed-WO data was loaded.
+   * Kept separate from reportFolderPath / daily workOrders import so
+   * the user can pull closed tickets over a specific date range for
+   * meeting prep without interfering with the Dashboard's active-WO list.
+   */
+  meetingNotesFilename?: string;
 }
 
 export interface AppData {

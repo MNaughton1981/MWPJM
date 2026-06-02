@@ -25,6 +25,13 @@ interface AppState {
   projects: Project[];
   settings: Settings;
   workOrders: ImportedWorkOrders | null;
+  /**
+   * Separate import for meeting notes / closed work orders.
+   * Kept distinct from `workOrders` so the user can load a filtered
+   * CSV (closed tickets over a date range) for 1:1 meeting prep
+   * without overwriting the Dashboard's active-WO list.
+   */
+  meetingNotesOrders: ImportedWorkOrders | null;
 
   /**
    * ISO timestamp of the last successful state sync (write OR apply).
@@ -206,6 +213,9 @@ interface AppState {
 
   // Work orders (imported from Nuvolo CSV)
   setWorkOrders: (data: ImportedWorkOrders | null) => void;
+  
+  // Meeting notes work orders (separate import for closed/historical tickets)
+  setMeetingNotesOrders: (data: ImportedWorkOrders | null) => void;
 
   // Bulk import/export
   replaceAll: (data: {
@@ -263,6 +273,7 @@ export const useStore = create<AppState>()(
       projects: [],
       settings: defaultSettings,
       workOrders: null,
+      meetingNotesOrders: null,
       lastSyncedAt: null,
       syncError: null,
       savedVendors: [],
@@ -625,6 +636,8 @@ export const useStore = create<AppState>()(
         }),
 
       setWorkOrders: (data) => set(() => ({ workOrders: data })),
+
+      setMeetingNotesOrders: (data) => set(() => ({ meetingNotesOrders: data })),
 
       replaceAll: (data) =>
         set(() => ({
