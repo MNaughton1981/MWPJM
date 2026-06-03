@@ -175,7 +175,7 @@ export default function SettingsPage() {
   }
 
   async function pullSyncFromFile(file: File) {
-    setSyncMsg(null);
+    setSyncMsg(`Reading "${file.name}"…`);
     setBusy('pull');
     try {
       const payload = await pullFromFile(file);

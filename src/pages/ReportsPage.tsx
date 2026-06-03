@@ -63,10 +63,16 @@ export default function ReportsPage() {
 
   async function handleFile(file: File) {
     setError(null);
-    setInfo(null);
+    // Immediate feedback the instant a file is chosen — on mobile the
+    // OneDrive picker closes and drops you back here with no native
+    // confirmation, so without this the tap feels like it did nothing
+    // while a large .xlsx parses.
+    setInfo(`Reading "${file.name}"…`);
+    setRefreshing(true);
     try {
       const { headers, rows } = await parseWorkOrderFile(file);
       if (headers.length === 0) {
+        setInfo(null);
         setError('File has no header row (or first row was empty).');
         return;
       }
@@ -79,9 +85,12 @@ export default function ReportsPage() {
         columnMap: map,
         rows: mapped,
       });
-      setInfo(`Imported ${mapped.length} row(s) from ${file.name}.`);
+      setInfo(`✓ Imported ${mapped.length} row(s) from "${file.name}".`);
     } catch (e) {
+      setInfo(null);
       setError(`Failed to parse file: ${(e as Error).message}`);
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -222,6 +231,27 @@ export default function ReportsPage() {
       {/* === Section 2: import === */}
       <section id="sec-import" className="card p-4 space-y-3 scroll-mt-20">
         <h2 className="font-semibold">Load latest report</h2>
+
+        {/* On mobile there's no folder API, so the file picker IS the
+            primary (and only) path. Make that obvious + tell the user
+            the one thing that trips everyone up: tap the FILE itself,
+            not a folder. */}
+        {!folderApi && (
+          <div className="text-xs text-slate-700 bg-blue-50 border border-blue-200 rounded p-3 space-y-1">
+            <p className="font-semibold text-blue-900">📱 On your phone</p>
+            <ol className="list-decimal pl-4 space-y-0.5">
+              <li>Tap <strong>📄 Pick file from OneDrive</strong> below.</li>
+              <li>
+                In the picker, open your OneDrive folder and{' '}
+                <strong>tap the CSV/Excel file itself</strong> — not the
+                folder. Tapping a folder just opens it; only tapping a file
+                brings you back here.
+              </li>
+              <li>You'll land back on this page with the import loaded.</li>
+            </ol>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-2">
           {folderApi && connectedFolder && (
             <button
@@ -233,10 +263,11 @@ export default function ReportsPage() {
             </button>
           )}
           <button
-            className="btn-secondary"
+            className={folderApi ? 'btn-secondary' : 'btn-primary'}
             onClick={() => fileRef.current?.click()}
+            disabled={refreshing}
           >
-            Pick file…
+            {!folderApi ? '📄 Pick file from OneDrive' : 'Pick file…'}
           </button>
           {workOrders && (
             <button
@@ -263,7 +294,9 @@ export default function ReportsPage() {
         </div>
         <p className="text-xs text-slate-500">
           Accepts <code>.csv</code>, <code>.xlsx</code>, and <code>.json</code>.
-          Refresh picks the most recently modified one in the connected folder.
+          {folderApi
+            ? ' Refresh picks the most recently modified one in the connected folder.'
+            : ' Pick the most recent export from your OneDrive folder.'}{' '}
           Filename doesn't matter — Nuvolo can name it however it wants. Helpful
           when Excel hijacks a CSV download and saves it as <code>.xlsx</code>,
           or when a Power Automate flow drops Excel attachments straight into

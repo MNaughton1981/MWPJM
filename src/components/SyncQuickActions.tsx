@@ -145,7 +145,7 @@ export default function SyncQuickActions() {
 
   async function handlePullFromFile(file: File) {
     setBusy(true);
-    setMsg(null);
+    setMsg(`Reading "${file.name}"…`);
     try {
       const payload = await pullFromFile(file);
       // The user explicitly picked this file — they want it applied.
@@ -155,7 +155,7 @@ export default function SyncQuickActions() {
       // photos in IndexedDB, so the worst case is "I picked the wrong
       // file and now my list looks weird"; recoverable by re-syncing.
       applySyncedState(payload);
-      setMsg(`Loaded ${payload.projects.length} project(s) from ${file.name}.`);
+      setMsg(`✓ Loaded ${payload.projects.length} project(s) from ${file.name}.`);
     } catch (e) {
       setMsg(`Load failed: ${(e as Error).message}`);
     } finally {
