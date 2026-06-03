@@ -353,6 +353,16 @@ export interface Settings {
    * the connected folder root, so existing setups keep working.
    */
   reportsSubfolder?: string;
+  /**
+   * When true (desktop only), every data change is also written to the
+   * Excel workbook (MWPJM-Data.xlsx) in the connected folder, debounced —
+   * not just the JSON sync file. This is the short-lived "dual-write"
+   * bridge during the JSON→Excel migration: it keeps the workbook a live
+   * mirror so it can be trusted before cutting over to Excel-only.
+   * Default false. Safe to leave off; the manual "Export to Excel" button
+   * still works either way.
+   */
+  dualWriteExcel?: boolean;
 }
 
 export interface AppData {
