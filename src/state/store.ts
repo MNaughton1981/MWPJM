@@ -47,6 +47,19 @@ interface AppState {
   syncError: string | null;
 
   /**
+   * ISO timestamp of the last successful dual-write of the Excel
+   * workbook (MWPJM-Data.xlsx), or null. Set by lib/excelSync.ts.
+   */
+  lastExcelWriteAt: string | null;
+  /**
+   * Most recent Excel dual-write error, or null if the last write
+   * succeeded. A common cause is the workbook being open in Excel
+   * (Windows file lock) — surfaced in Settings so the user knows to
+   * close it.
+   */
+  excelWriteError: string | null;
+
+  /**
    * The user's persistent vendor "book" — independent of any specific
    * workboard. Auto-populated when the user saves a vendor on a
    * workboard via the "💾 Save to book" button, and surfaced as a
@@ -263,6 +276,7 @@ const defaultSettings: Settings = {
   calendarProvider: 'outlook', // Default to Outlook Calendar (.ics download)
   photosSubfolder: 'photos',
   reportsSubfolder: 'reports',
+  dualWriteExcel: false,
 };
 
 function touch(p: Project): Project {
@@ -278,6 +292,8 @@ export const useStore = create<AppState>()(
       meetingNotesOrders: null,
       lastSyncedAt: null,
       syncError: null,
+      lastExcelWriteAt: null,
+      excelWriteError: null,
       savedVendors: [],
       savedVendorEvents: [],
       composerDrafts: {},

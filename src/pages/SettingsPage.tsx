@@ -64,6 +64,8 @@ export default function SettingsPage() {
   const replaceAll = useStore((s) => s.replaceAll);
   const lastSyncedAt = useStore((s) => s.lastSyncedAt);
   const syncError = useStore((s) => s.syncError);
+  const lastExcelWriteAt = useStore((s) => s.lastExcelWriteAt);
+  const excelWriteError = useStore((s) => s.excelWriteError);
   const savedVendors = useStore((s) => s.savedVendors);
   const removeSavedVendor = useStore((s) => s.removeSavedVendor);
   const savedVendorEvents = useStore((s) => s.savedVendorEvents);
@@ -671,21 +673,22 @@ export default function SettingsPage() {
       <section id="sec-excel" className="card p-4 space-y-3 scroll-mt-20 border-2 border-brand-200 bg-brand-50">
         <div>
           <h2 className="font-semibold flex items-center gap-2">
-            📊 Excel Backend Migration (Phase 1)
+            📊 Excel Backend Migration (Phase 2)
             <span className="pill bg-brand-600 text-white text-[10px]">NEW</span>
           </h2>
           <p className="text-sm text-slate-700 mt-2">
-            <strong>We're migrating from JSON to Excel storage!</strong> This will enable:
+            <strong>We're migrating from JSON to Excel storage.</strong> This enables:
           </p>
           <ul className="text-sm text-slate-700 mt-2 space-y-1 list-disc list-inside">
             <li>Better sync between mobile and desktop (OneDrive handles it)</li>
-            <li>Photo sync (finally!)</li>
+            <li>Photo sync to your Data folder</li>
             <li>Human-readable backup (open in Excel anytime)</li>
             <li>Power Automate integration (CSV imports directly into Excel)</li>
           </ul>
           <p className="text-xs text-slate-600 mt-2">
-            <strong>Your current app keeps working</strong> — this just creates the Excel file
-            for testing. Once we verify it works, we'll switch over in Phase 2.
+            <strong>Your current app keeps working</strong> — JSON storage stays
+            intact. Export once, then turn on dual-write below to keep the
+            workbook a live mirror until we cut over to Excel-only.
           </p>
         </div>
 
@@ -739,13 +742,67 @@ export default function SettingsPage() {
           </div>
         )}
 
+        {/* Dual-write bridge toggle. Only meaningful on desktop with a
+            connected folder — that's where the workbook can be written. */}
+        {folderApi && connectedFolder && (
+          <div className="bg-white border border-slate-300 rounded p-3 space-y-2">
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                checked={!!settings.dualWriteExcel}
+                onChange={(e) => setSettings({ dualWriteExcel: e.target.checked })}
+              />
+              <span>
+                <strong>Dual-write to Excel (Phase 2 bridge)</strong> — mirror
+                every change into <code>MWPJM-Data.xlsx</code> automatically, a
+                few seconds after you make it. Leaves your current JSON storage
+                fully intact; this just keeps the workbook live so you can
+                trust it before we switch to Excel-only. Turn it off once
+                you've cut over.
+              </span>
+            </label>
+            {settings.dualWriteExcel && (
+              <div className="text-[11px] pl-6 space-y-1">
+                {excelWriteError ? (
+                  <p className="text-rose-700">
+                    ⚠ Last write failed: {excelWriteError}
+                    <br />
+                    <span className="text-slate-500">
+                      If the workbook is open in Excel, close it — Windows locks
+                      the file and blocks the app from writing.
+                    </span>
+                  </p>
+                ) : lastExcelWriteAt ? (
+                  <p className="text-emerald-700">
+                    ✓ Workbook last written {formatDateTime(lastExcelWriteAt)}
+                  </p>
+                ) : (
+                  <p className="text-slate-500">
+                    Waiting for the first change to write…
+                  </p>
+                )}
+                <p className="text-slate-500">
+                  Heads-up: keep <code>MWPJM-Data.xlsx</code> closed while this
+                  is on, so writes don't get blocked by an Excel file lock.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="text-[11px] text-slate-600 bg-white border border-slate-200 rounded p-2">
-          <strong>What happens next:</strong>
+          <strong>Migration roadmap:</strong>
           <ol className="list-decimal list-inside mt-1 space-y-0.5">
-            <li>Click "Export to Excel" to create MWPJM-Data.xlsx</li>
-            <li>Open the file in Excel to verify your data migrated correctly</li>
-            <li>Wait for Phase 2 update (dual-write mode for safety)</li>
-            <li>Eventually switch to Excel-only (your JSON stays as backup)</li>
+            <li>✅ Export to Excel — create MWPJM-Data.xlsx and verify your data</li>
+            <li>
+              ✅ Dual-write (this toggle) — keep the workbook a live mirror
+              while you confirm it stays correct
+            </li>
+            <li>
+              ⬜ Excel-only cutover — the app reads/writes the workbook
+              directly; JSON stays as a backup. Turn dual-write off then.
+            </li>
           </ol>
         </div>
       </section>

@@ -14,6 +14,7 @@ import {
   startAutoSync,
   stopAutoSync,
 } from './lib/sync';
+import { startExcelDualWrite, stopExcelDualWrite } from './lib/excelSync';
 
 export default function App() {
   // Wire up cross-device state sync. When the user has flipped
@@ -24,6 +25,10 @@ export default function App() {
   // — the Settings page surfaces the same "Pull from file" path there.
   const syncEnabled = useStore((s) => s.settings.syncEnabled);
   const syncFilename = useStore((s) => s.settings.syncFilename);
+  // Dual-write bridge: also mirror every data change into the Excel
+  // workbook (MWPJM-Data.xlsx) while the JSON→Excel migration is in
+  // progress. Desktop-only; independent of the JSON sync above.
+  const dualWriteExcel = useStore((s) => s.settings.dualWriteExcel);
 
   useEffect(() => {
     if (!syncEnabled) return;
@@ -37,6 +42,20 @@ export default function App() {
     }
     return () => stopAutoSync();
   }, [syncEnabled, syncFilename]);
+
+  useEffect(() => {
+    if (!dualWriteExcel) return;
+    if (!isFolderApiSupported()) return;
+    try {
+      startExcelDualWrite();
+    } catch (e) {
+      // startExcelDualWrite throws only when the folder API is missing,
+      // which we already guarded above; any write error is recorded in
+      // store.excelWriteError and surfaced in Settings.
+      void e;
+    }
+    return () => stopExcelDualWrite();
+  }, [dualWriteExcel]);
 
   return (
     <Routes>
