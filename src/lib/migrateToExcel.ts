@@ -143,8 +143,8 @@ export async function migrateToExcel(): Promise<MigrationResult> {
           photosSheet.addRow({
             id: photo.id,
             projectID: project.id,
-            filename: `photo-${photo.id}`, // Generate filename from ID
-            path: '', // Photos not migrated yet - placeholder
+            filename: photo.originalName || `photo-${photo.id}`,
+            path: photo.folderPath || '', // relative path under the Data folder, if backed up
             caption: photo.caption || '',
             capturedAt: new Date(photo.capturedAt),
           });

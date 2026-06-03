@@ -188,3 +188,95 @@ export async function loadProjectPhotoFiles(
   }
   return files;
 }
+
+
+// ---------- Folder-backed photo storage (Phase 2b) ----------
+//
+// On desktop (File System Access API available + a connected folder),
+// photo binaries are ALSO written into a subfolder of the connected
+// Data folder (default `photos/`) so they ride OneDrive's sync to the
+// user's other desktops and get archived outside the fragile per-browser
+// IndexedDB. IndexedDB remains the primary, instant-access store on every
+// device; the folder copy is a backup + cross-device bridge.
+//
+// All functions here are best-effort and import the folder helpers
+// lazily-safe (folderConnection throws if no folder is connected, which
+// callers catch). Mobile has no folder API, so these become no-ops there.
+
+import {
+  writeFileToSubfolder,
+  readFileFromSubfolder,
+  deleteFileFromSubfolder,
+} from './folderConnection';
+
+/**
+ * Deterministic, collision-free filename for a photo's folder copy:
+ * `${projectId}_${photoId}.${ext}`. The ext is derived from the
+ * original name (defaulting to jpg). Both ids are filename-safe.
+ */
+export function photoFolderFilename(
+  projectId: string,
+  photoId: string,
+  originalName: string,
+): string {
+  const extMatch = originalName.match(/\.([a-z0-9]+)$/i);
+  const ext = (extMatch?.[1] ?? 'jpg').toLowerCase();
+  return `${projectId}_${photoId}.${ext}`;
+}
+
+/**
+ * Write a photo blob into the configured photos subfolder of the
+ * connected folder. Returns the relative path stored on the photo's
+ * metadata (e.g. `photos/proj-abc_photo-xyz.jpg`). Throws if no folder
+ * is connected / write denied — callers should treat that as "couldn't
+ * back up, keep IndexedDB-only" rather than a hard failure.
+ */
+export async function savePhotoToFolder(
+  subfolder: string,
+  projectId: string,
+  photoId: string,
+  originalName: string,
+  blob: Blob,
+): Promise<string> {
+  const filename = photoFolderFilename(projectId, photoId, originalName);
+  await writeFileToSubfolder(subfolder, filename, blob);
+  return `${subfolder}/${filename}`;
+}
+
+/**
+ * Read a photo blob back from its folder path (e.g. `photos/abc.jpg`).
+ * Returns undefined if the folder/file isn't reachable. Splits the
+ * relative path into subfolder + filename on the last slash.
+ */
+export async function loadPhotoFromFolder(
+  folderPath: string,
+): Promise<Blob | undefined> {
+  const slash = folderPath.lastIndexOf('/');
+  if (slash < 0) return undefined;
+  const subfolder = folderPath.slice(0, slash);
+  const filename = folderPath.slice(slash + 1);
+  if (!subfolder || !filename) return undefined;
+  try {
+    const file = await readFileFromSubfolder(subfolder, filename);
+    return file ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Delete a photo's folder copy, given its relative path. Best-effort;
+ * never throws.
+ */
+export async function deletePhotoFromFolder(folderPath: string): Promise<void> {
+  const slash = folderPath.lastIndexOf('/');
+  if (slash < 0) return;
+  const subfolder = folderPath.slice(0, slash);
+  const filename = folderPath.slice(slash + 1);
+  if (!subfolder || !filename) return;
+  try {
+    await deleteFileFromSubfolder(subfolder, filename);
+  } catch {
+    // best-effort
+  }
+}
