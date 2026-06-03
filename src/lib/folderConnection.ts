@@ -199,13 +199,15 @@ export async function clearFolderHandle(): Promise<void> {
 // inside it.
 
 /**
- * Write text content to a file in the connected folder, creating it if
- * it doesn't exist and overwriting it if it does. Throws if no folder
- * is connected or the user denies the readwrite permission upgrade.
+ * Write content to a file in the connected folder, creating it if
+ * it doesn't exist and overwriting it if it does. Accepts text (JSON
+ * sync files) or binary (BufferSource/Blob — e.g. the Excel .xlsx
+ * workbook). Throws if no folder is connected or the user denies the
+ * readwrite permission upgrade.
  */
 export async function writeFileToFolder(
   filename: string,
-  content: string,
+  content: string | BufferSource | Blob,
 ): Promise<void> {
   const handle = await idbGet<FileSystemDirectoryHandle>(KEY);
   if (!handle) {

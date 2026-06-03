@@ -22,6 +22,7 @@ import {
 } from '../lib/sync';
 import { formatDateTime } from '../lib/format';
 import PageTOC, { type PageTOCItem } from '../components/PageTOC';
+import { migrateToExcel, verifyExcelFile } from '../lib/migrateToExcel';
 
 // TOC items mirror the order of <section> tags below. Each section
 // has an id matching one of these entries so the picker scrolls to
@@ -34,6 +35,7 @@ const TOC_ITEMS: PageTOCItem[] = [
   { id: 'sec-folder', label: 'Nuvolo report folder path', icon: '📁' },
   { id: 'sec-photos', label: 'Photo naming pattern', icon: '🖼️' },
   { id: 'sec-sync', label: 'Sync state via OneDrive', icon: '🔄' },
+  { id: 'sec-excel', label: 'Excel backend (new!)', icon: '📊' },
   { id: 'sec-vendor-book', label: 'Vendor book', icon: '📒' },
   { id: 'sec-vendor-events', label: 'Vendor events', icon: '📅' },
   { id: 'sec-backup', label: 'Manual backup', icon: '💾' },
@@ -56,17 +58,57 @@ export default function SettingsPage() {
   const syncFileRef = useRef<HTMLInputElement>(null);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [excelMsg, setExcelMsg] = useState<string | null>(null);
+  const [excelExists, setExcelExists] = useState(false);
+  const [excelProjectsCount, setExcelProjectsCount] = useState<number>(0);
+  const [excelMigrating, setExcelMigrating] = useState(false);
   const [connectedFolder, setConnectedFolder] = useState<string | undefined>();
   const [busy, setBusy] = useState<'push' | 'pull' | null>(null);
   const folderApi = isFolderApiSupported();
 
   useEffect(() => {
     getStoredFolderName().then(setConnectedFolder);
+    // Check if Excel file exists (lightweight — does not parse the workbook)
+    verifyExcelFile().then((result) => {
+      setExcelExists(result.exists);
+    });
   }, []);
 
   function exportBackup() {
     const data = buildAppData(projects, settings, savedVendors, savedVendorEvents);
     downloadJson(`mwpjm-backup-${new Date().toISOString().slice(0, 10)}.json`, data);
+  }
+
+  async function handleMigrateToExcel() {
+    if (excelMigrating) return;
+    
+    const ok = window.confirm(
+      `Export all your current data to Excel?\n\n` +
+        `This creates MWPJM-Data.xlsx in your connected OneDrive folder.\n\n` +
+        `Your current JSON storage keeps working — this is just creating the Excel file for testing.`
+    );
+    if (!ok) return;
+
+    setExcelMigrating(true);
+    setExcelMsg('Migrating to Excel...');
+
+    try {
+      const result = await migrateToExcel();
+      if (result.success) {
+        setExcelMsg(
+          `✓ Success! Exported ${result.projectsCount} project(s) with ${result.activityCount} activity entries. ` +
+          `The Excel file is now in your OneDrive folder.`
+        );
+        setExcelExists(true);
+        setExcelProjectsCount(result.projectsCount);
+      } else {
+        setExcelMsg(`✗ Migration failed: ${result.error}`);
+      }
+    } catch (e) {
+      setExcelMsg(`✗ Migration failed: ${(e as Error).message}`);
+    } finally {
+      setExcelMigrating(false);
+    }
   }
 
   async function onImport(file: File) {
@@ -513,6 +555,88 @@ export default function SettingsPage() {
             {syncMsg}
           </p>
         )}
+      </section>
+
+      <section id="sec-excel" className="card p-4 space-y-3 scroll-mt-20 border-2 border-brand-200 bg-brand-50">
+        <div>
+          <h2 className="font-semibold flex items-center gap-2">
+            📊 Excel Backend Migration (Phase 1)
+            <span className="pill bg-brand-600 text-white text-[10px]">NEW</span>
+          </h2>
+          <p className="text-sm text-slate-700 mt-2">
+            <strong>We're migrating from JSON to Excel storage!</strong> This will enable:
+          </p>
+          <ul className="text-sm text-slate-700 mt-2 space-y-1 list-disc list-inside">
+            <li>Better sync between mobile and desktop (OneDrive handles it)</li>
+            <li>Photo sync (finally!)</li>
+            <li>Human-readable backup (open in Excel anytime)</li>
+            <li>Power Automate integration (CSV imports directly into Excel)</li>
+          </ul>
+          <p className="text-xs text-slate-600 mt-2">
+            <strong>Your current app keeps working</strong> — this just creates the Excel file
+            for testing. Once we verify it works, we'll switch over in Phase 2.
+          </p>
+        </div>
+
+        {!folderApi && (
+          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
+            <strong>Folder API required.</strong> Excel migration needs Chrome/Edge on desktop
+            to write files to OneDrive. On mobile, you'll pull the Excel file once it's synced.
+          </div>
+        )}
+
+        {folderApi && !connectedFolder && (
+          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
+            Connect a folder on{' '}
+            <Link to="/reports" className="text-brand-600 hover:underline">
+              Reports → Connect folder
+            </Link>{' '}
+            first. The Excel file will be created there.
+          </div>
+        )}
+
+        {excelExists ? (
+          <div className="text-sm bg-emerald-50 border border-emerald-200 rounded p-3">
+            <div className="flex items-center gap-2 font-semibold text-emerald-900">
+              ✓ Excel file exists
+            </div>
+            <div className="text-xs text-emerald-700 mt-1">
+              <code className="font-mono">MWPJM-Data.xlsx</code>
+              {excelProjectsCount > 0
+                ? ` contains ${excelProjectsCount} project(s).`
+                : ' is present in your connected folder.'}{' '}
+              Open it in Excel to verify the data looks correct.
+            </div>
+          </div>
+        ) : (
+          <div>
+            {folderApi && connectedFolder && (
+              <button
+                className="btn-primary"
+                onClick={handleMigrateToExcel}
+                disabled={excelMigrating}
+              >
+                {excelMigrating ? 'Migrating...' : '📊 Export to Excel'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {excelMsg && (
+          <div className="text-xs text-slate-700 bg-white border border-slate-300 rounded p-3">
+            {excelMsg}
+          </div>
+        )}
+
+        <div className="text-[11px] text-slate-600 bg-white border border-slate-200 rounded p-2">
+          <strong>What happens next:</strong>
+          <ol className="list-decimal list-inside mt-1 space-y-0.5">
+            <li>Click "Export to Excel" to create MWPJM-Data.xlsx</li>
+            <li>Open the file in Excel to verify your data migrated correctly</li>
+            <li>Wait for Phase 2 update (dual-write mode for safety)</li>
+            <li>Eventually switch to Excel-only (your JSON stays as backup)</li>
+          </ol>
+        </div>
       </section>
 
       <section id="sec-vendor-book" className="card p-4 space-y-3 scroll-mt-20">

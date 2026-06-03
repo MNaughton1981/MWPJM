@@ -47,6 +47,24 @@ export default defineConfig({
       workbox: {
         navigateFallback: '/MWPJM/index.html',
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        // Keep the heavy ExcelJS chunk (~940 KB) OUT of the install-time
+        // precache so mobile installs stay lean. It's only needed when
+        // the user runs the Excel migration / sync. The runtimeCaching
+        // rule below caches it on first use so offline still works after.
+        globIgnores: ['**/exceljs*.js'],
+        runtimeCaching: [
+          {
+            urlPattern: /exceljs.*\.js$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'exceljs-lib',
+              expiration: {
+                maxEntries: 2,
+                maxAgeSeconds: 60 * 60 * 24 * 90, // 90 days
+              },
+            },
+          },
+        ],
       },
     }),
   ],
