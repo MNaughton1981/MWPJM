@@ -369,3 +369,104 @@ export async function readFileFromFolder(
     throw e;
   }
 }
+
+// ---------- Read / write a named file inside a SUBFOLDER ----------
+//
+// Used by photo-folder sync (Phase 2b): photo binaries live under
+// `<connected folder>/<subfolder>/<filename>` (e.g. `photos/...jpg`).
+// These keep the connected-folder root tidy and mirror the layout the
+// user configures in Settings → Storage layout.
+
+/**
+ * Write content to `<connected folder>/<subfolder>/<filename>`, creating
+ * the subfolder and file as needed. Accepts text or binary. Throws if no
+ * folder is connected or write permission is denied.
+ */
+export async function writeFileToSubfolder(
+  subfolder: string,
+  filename: string,
+  content: string | BufferSource | Blob,
+): Promise<void> {
+  const subHandle = await getSubfolderHandle(subfolder, { create: true });
+  if (!subHandle) {
+    // create:true means this shouldn't happen, but guard anyway.
+    throw new Error(`Could not open or create subfolder "${subfolder}".`);
+  }
+  const dir = subHandle as FileSystemDirectoryHandle & {
+    getFileHandle: (
+      name: string,
+      opts?: { create?: boolean },
+    ) => Promise<FileSystemFileHandle>;
+  };
+  const fileHandle = await dir.getFileHandle(filename, { create: true });
+  const fh = fileHandle as FileSystemFileHandle & {
+    createWritable: () => Promise<{
+      write: (data: string | BufferSource | Blob) => Promise<void>;
+      close: () => Promise<void>;
+    }>;
+  };
+  const writable = await fh.createWritable();
+  try {
+    await writable.write(content);
+  } finally {
+    await writable.close();
+  }
+}
+
+/**
+ * Read `<connected folder>/<subfolder>/<filename>`. Returns null if the
+ * subfolder or file isn't there (so a missing binary is a soft miss the
+ * caller can fall back from, not a thrown error).
+ */
+export async function readFileFromSubfolder(
+  subfolder: string,
+  filename: string,
+): Promise<File | null> {
+  let subHandle: FileSystemDirectoryHandle | null;
+  try {
+    subHandle = await getSubfolderHandle(subfolder, { create: false });
+  } catch {
+    return null;
+  }
+  if (!subHandle) return null;
+  const dir = subHandle as FileSystemDirectoryHandle & {
+    getFileHandle: (
+      name: string,
+      opts?: { create?: boolean },
+    ) => Promise<FileSystemFileHandle>;
+  };
+  try {
+    const fileHandle = await dir.getFileHandle(filename, { create: false });
+    return await fileHandle.getFile();
+  } catch (e) {
+    if ((e as Error).name === 'NotFoundError') return null;
+    throw e;
+  }
+}
+
+/**
+ * Delete `<connected folder>/<subfolder>/<filename>` if it exists.
+ * No-op (resolves) when the folder/file isn't there. Best-effort:
+ * used when a photo is removed so we don't leave orphaned binaries.
+ */
+export async function deleteFileFromSubfolder(
+  subfolder: string,
+  filename: string,
+): Promise<void> {
+  let subHandle: FileSystemDirectoryHandle | null;
+  try {
+    subHandle = await getSubfolderHandle(subfolder, { create: false });
+  } catch {
+    return;
+  }
+  if (!subHandle) return;
+  const dir = subHandle as FileSystemDirectoryHandle & {
+    removeEntry?: (name: string) => Promise<void>;
+  };
+  if (!dir.removeEntry) return;
+  try {
+    await dir.removeEntry(filename);
+  } catch {
+    // Already gone or not removable — nothing to do.
+  }
+}

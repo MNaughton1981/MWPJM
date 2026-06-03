@@ -7,7 +7,14 @@ import {
   deletePhoto,
   loadPhoto,
   savePhoto,
+  savePhotoToFolder,
+  loadPhotoFromFolder,
+  deletePhotoFromFolder,
 } from '../lib/photoStorage';
+import {
+  getStoredFolderName,
+  isFolderApiSupported,
+} from '../lib/folderConnection';
 
 interface Props {
   project: Project;
@@ -27,11 +34,26 @@ export default function PhotosSection({ project }: Props) {
   const removePhotoMeta = useStore((s) => s.removePhotoMeta);
 
   const [thumbs, setThumbs] = useState<Map<string, string>>(new Map());
-  const [busy, setBusy] = useState<'idle' | 'adding' | 'downloading'>('idle');
+  const [busy, setBusy] = useState<
+    'idle' | 'adding' | 'downloading' | 'backing-up'
+  >('idle');
+  const [folderConnected, setFolderConnected] = useState(false);
+  const [backupMsg, setBackupMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
 
   const photos = project.photos ?? [];
+
+  // Photos subfolder under the connected Data folder (default 'photos').
+  const photosSubfolder = (settings.photosSubfolder || 'photos').trim() || 'photos';
+  // Folder-backed photo storage is desktop-only (File System Access API)
+  // AND requires a connected folder. On mobile this stays false, so the
+  // app silently keeps the IndexedDB-only behavior.
+  const canFolderSync = isFolderApiSupported() && folderConnected;
+
+  useEffect(() => {
+    getStoredFolderName().then((name) => setFolderConnected(!!name));
+  }, []);
 
   // Load thumbnails for the current photo set, revoke object URLs on unmount.
   useEffect(() => {
@@ -40,7 +62,18 @@ export default function PhotosSection({ project }: Props) {
     (async () => {
       const next = new Map<string, string>();
       for (const photo of photos) {
-        const blob = await loadPhoto(project.id, photo.id);
+        let blob = await loadPhoto(project.id, photo.id);
+        // Fallback: blob isn't in this device's IndexedDB (e.g. metadata
+        // synced from another desktop) but a folder copy exists — read it
+        // back from the OneDrive-synced folder, then re-cache locally so
+        // the next load is instant and this device owns a copy too.
+        if (!blob && photo.folderPath) {
+          const fromFolder = await loadPhotoFromFolder(photo.folderPath);
+          if (fromFolder) {
+            blob = fromFolder;
+            savePhoto(project.id, photo.id, fromFolder).catch(() => undefined);
+          }
+        }
         if (cancelled) return;
         if (blob) {
           const url = URL.createObjectURL(blob);
@@ -76,14 +109,81 @@ export default function PhotosSection({ project }: Props) {
           size: file.size,
         };
         addPhotoMeta(project.id, photo);
+        // Best-effort backup into the connected Data folder (desktop
+        // only). Failures (no folder, permission denied) are swallowed —
+        // the photo still lives in IndexedDB, same as before.
+        if (canFolderSync) {
+          try {
+            const rel = await savePhotoToFolder(
+              photosSubfolder,
+              project.id,
+              id,
+              file.name,
+              file,
+            );
+            updatePhotoMeta(project.id, id, { folderPath: rel });
+          } catch {
+            // keep IndexedDB-only
+          }
+        }
       }
     } finally {
       setBusy('idle');
     }
   }
 
+  /**
+   * Back up every photo that doesn't yet have a folder copy into the
+   * connected Data folder. Covers photos captured before folder sync
+   * existed, or on a device that only just connected the folder.
+   * Desktop-only (gated by canFolderSync at the call site).
+   */
+  async function backupPhotosToFolder() {
+    setBusy('backing-up');
+    setBackupMsg(null);
+    let done = 0;
+    let skipped = 0;
+    try {
+      for (const photo of photos) {
+        if (photo.folderPath) {
+          skipped++;
+          continue;
+        }
+        const blob = await loadPhoto(project.id, photo.id);
+        if (!blob) {
+          skipped++;
+          continue;
+        }
+        try {
+          const rel = await savePhotoToFolder(
+            photosSubfolder,
+            project.id,
+            photo.id,
+            photo.originalName,
+            blob,
+          );
+          updatePhotoMeta(project.id, photo.id, { folderPath: rel });
+          done++;
+        } catch (e) {
+          setBackupMsg(`Backup stopped: ${(e as Error).message}`);
+          return;
+        }
+      }
+      setBackupMsg(
+        done === 0
+          ? `All photos already backed up to ${photosSubfolder}/.`
+          : `✓ Backed up ${done} photo${done !== 1 ? 's' : ''} to ${photosSubfolder}/${skipped ? ` (${skipped} already done)` : ''}.`,
+      );
+    } finally {
+      setBusy('idle');
+    }
+  }
+
   async function downloadOne(photo: ProjectPhoto, seq: number) {
-    const blob = await loadPhoto(project.id, photo.id);
+    let blob = await loadPhoto(project.id, photo.id);
+    if (!blob && photo.folderPath) {
+      blob = await loadPhotoFromFolder(photo.folderPath);
+    }
     if (!blob) return;
     const filename = buildFilename({
       pattern: settings.photoNamingPattern,
@@ -113,6 +213,11 @@ export default function PhotosSection({ project }: Props) {
   async function remove(photo: ProjectPhoto) {
     if (!window.confirm(`Remove this photo from the project?`)) return;
     await deletePhoto(project.id, photo.id);
+    // Best-effort cleanup of the folder copy so we don't orphan binaries
+    // in the OneDrive folder. No-op on mobile / when not connected.
+    if (photo.folderPath) {
+      deletePhotoFromFolder(photo.folderPath).catch(() => undefined);
+    }
     removePhotoMeta(project.id, photo.id);
   }
 
@@ -156,6 +261,16 @@ export default function PhotosSection({ project }: Props) {
               title="Download every photo with the configured naming pattern"
             >
               {busy === 'downloading' ? 'Downloading…' : '⬇ Download all renamed'}
+            </button>
+          )}
+          {canFolderSync && photos.length > 0 && (
+            <button
+              className="btn-secondary text-xs"
+              onClick={backupPhotosToFolder}
+              disabled={busy !== 'idle'}
+              title={`Copy any not-yet-backed-up photos into the "${photosSubfolder}" subfolder of your connected Data folder (syncs via OneDrive).`}
+            >
+              {busy === 'backing-up' ? 'Backing up…' : '☁ Back up to folder'}
             </button>
           )}
           <input
@@ -207,8 +322,25 @@ export default function PhotosSection({ project }: Props) {
         </ul>
       )}
 
+      {backupMsg && (
+        <p className="text-[11px] text-slate-700 bg-slate-50 border border-slate-200 rounded p-2">
+          {backupMsg}
+        </p>
+      )}
+
       <p className="text-[11px] text-slate-500">
         Pattern: <code>{settings.photoNamingPattern}</code> · Edit in Settings.
+        {canFolderSync ? (
+          <>
+            {' '}· New photos are backed up to{' '}
+            <code>{photosSubfolder}/</code> in your connected folder.
+          </>
+        ) : (
+          <>
+            {' '}· Photos are stored on this device. Connect a folder on a
+            desktop browser to back them up to OneDrive.
+          </>
+        )}
       </p>
     </section>
   );

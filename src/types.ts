@@ -197,6 +197,17 @@ export interface ProjectPhoto {
   capturedAt: string; // ISO datetime
   addedAt: string; // ISO datetime
   size: number; // bytes
+  /**
+   * Relative path (within the connected Data folder) where this photo's
+   * binary was written, e.g. `photos/proj-abc_photo-xyz.jpg`. Set when
+   * the photo is backed up to the folder on a desktop browser that has
+   * the File System Access API + a connected folder. When present, a
+   * device whose local IndexedDB doesn't have the blob (e.g. another
+   * desktop that received the metadata via sync) can read the binary
+   * back from the OneDrive-synced folder. Undefined = IndexedDB-only
+   * (the default on mobile, where folder writes aren't possible).
+   */
+  folderPath?: string;
 }
 
 export type ProjectStatus =
