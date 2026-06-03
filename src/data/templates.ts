@@ -45,6 +45,23 @@ export function buildWorkOrderFollowupTemplate(name: string): Project {
 }
 
 /**
+ * Meeting / quick follow-up template — for capturing a list of
+ * follow-up tasks and notes that don't (yet) warrant a work order.
+ * Same lightweight "simple" shape as the WO follow-up (no trades), and
+ * deliberately FWKD-free: you open it, jot tasks into the Follow-up
+ * Tasks checklist, and add notes — no work order number required. If a
+ * task later turns into real work, you can drop the FWKD in then.
+ */
+export function buildMeetingFollowupTemplate(name: string): Project {
+  return {
+    ...emptyCommon(name),
+    workOrderId: '',
+    description: '',
+    simple: true,
+  };
+}
+
+/**
  * Full-scope template: 18" dishwasher addition alongside existing 24" DW.
  * Mirrors the kitchenette pilot scope (demo base cabinet, add framing,
  * plumb + electrical rough-in, set unit, trim, test).
@@ -113,6 +130,13 @@ export const TEMPLATES: TemplateInfo[] = [
     description:
       'Lightweight project: notes, photos, vendor contacts. No trades or timetable. Default for quick WO tracking.',
     build: buildWorkOrderFollowupTemplate,
+  },
+  {
+    id: 'meeting-followup',
+    name: 'Meeting / Quick Follow-up',
+    description:
+      'Capture a list of follow-up tasks and notes from a meeting — no work order needed. Just a Follow-up Tasks checklist, notes, and activity log.',
+    build: buildMeetingFollowupTemplate,
   },
   {
     id: 'dishwasher-upgrade',

@@ -7,9 +7,19 @@ import { formatDate } from '../lib/format';
 interface Props {
   projectId: string;
   milestones: Milestone[];
+  /** Section heading. Defaults to "Timetable"; simple/quick workboards
+   *  pass "Follow-up Tasks" so the same checklist reads as a task list. */
+  heading?: string;
+  /** Placeholder for the add-row input. */
+  addPlaceholder?: string;
 }
 
-export default function TimetableSection({ projectId, milestones }: Props) {
+export default function TimetableSection({
+  projectId,
+  milestones,
+  heading = 'Timetable',
+  addPlaceholder = 'Add milestone…',
+}: Props) {
   const addMilestone = useStore((s) => s.addMilestone);
   const updateMilestone = useStore((s) => s.updateMilestone);
   const removeMilestone = useStore((s) => s.removeMilestone);
@@ -39,7 +49,7 @@ export default function TimetableSection({ projectId, milestones }: Props) {
   return (
     <section className="card p-4 space-y-3">
       <div className="flex items-baseline justify-between">
-        <h2 className="font-semibold">Timetable</h2>
+        <h2 className="font-semibold">{heading}</h2>
         <span className="text-xs text-slate-500">
           {milestones.filter((m) => m.done).length}/{milestones.length} done
         </span>
@@ -70,7 +80,7 @@ export default function TimetableSection({ projectId, milestones }: Props) {
       <div className="border-t pt-3 flex flex-col sm:flex-row gap-2">
         <input
           className="input flex-1"
-          placeholder="Add milestone…"
+          placeholder={addPlaceholder}
           value={newTitle}
           onChange={(e) => setNewTitle(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && add()}

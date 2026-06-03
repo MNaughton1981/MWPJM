@@ -83,8 +83,12 @@ export default function ProjectPage() {
     ];
     if (!isSimple) {
       items.push({ id: 'sec-trades', label: 'Trade Coordination', icon: '🔧' });
-      items.push({ id: 'sec-timetable', label: 'Timetable', icon: '📅' });
     }
+    items.push({
+      id: 'sec-timetable',
+      label: isSimple ? 'Follow-up Tasks' : 'Timetable',
+      icon: isSimple ? '✅' : '📅',
+    });
     items.push({ id: 'sec-photos', label: 'Photos', icon: '🖼️' });
     items.push({ id: 'sec-activity', label: 'Activity Log', icon: '📜' });
     return items;
@@ -422,14 +426,18 @@ export default function ProjectPage() {
         </div>
       )}
 
-      {!isSimple && (
-        <div id="sec-timetable" className="scroll-mt-20">
-          <TimetableSection
-            projectId={project.id}
-            milestones={project.milestones}
-          />
-        </div>
-      )}
+      {/* Task checklist — always available. In full projects it reads as
+          the "Timetable"; in simple/quick workboards it's the "Follow-up
+          Tasks" list, so you can capture meeting action items without a
+          work order. */}
+      <div id="sec-timetable" className="scroll-mt-20">
+        <TimetableSection
+          projectId={project.id}
+          milestones={project.milestones}
+          heading={isSimple ? 'Follow-up Tasks' : 'Timetable'}
+          addPlaceholder={isSimple ? 'Add a follow-up task…' : 'Add milestone…'}
+        />
+      </div>
 
       <div id="sec-photos" className="scroll-mt-20">
         <PhotosSection project={project} />
