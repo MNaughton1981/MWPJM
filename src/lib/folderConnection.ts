@@ -129,25 +129,63 @@ export interface LatestReportResult {
   /** The detected file extension (e.g. '.csv', '.xlsx'). Useful for
    *  status messages so the user knows which format was picked up. */
   extension: string;
+  /** Where the file was found — the connected folder root, or a named
+   *  subfolder (e.g. 'reports'). Lets the UI tell the user exactly
+   *  which location was scanned. */
+  scannedLocation: string;
 }
 
 /**
- * Find and read the most recently modified work order export in the
- * connected folder. Scans for `.csv`, `.xlsx`, `.xls`, and `.json` so
- * the same folder works whether your Power Automate flow drops Excel
- * attachments or you export ServiceNow JSON manually. Returns null if
- * the folder has none of those.
+ * Resolve a named subfolder inside the connected folder. Returns the
+ * child directory handle, or null if it doesn't exist (and create is
+ * false). Used to keep stored content organized under one connected
+ * "Data" folder — e.g. `Data/photos/`, `Data/reports/` — without
+ * requiring a second folder-permission grant.
+ *
+ * Pass `{ create: true }` to make the subfolder if it's missing (needed
+ * when WRITING, e.g. saving a photo). For reads we pass create:false so
+ * a missing subfolder is a soft "not there yet" rather than an error.
  */
-export async function readLatestReport(): Promise<LatestReportResult | null> {
+export async function getSubfolderHandle(
+  name: string,
+  opts: { create?: boolean } = {},
+): Promise<FileSystemDirectoryHandle | null> {
   const handle = await idbGet<FileSystemDirectoryHandle>(KEY);
   if (!handle) {
     throw new Error('No folder connected. Connect a folder first.');
   }
-  const ok = await ensurePermission(handle);
+  const ok = await ensurePermission(
+    handle,
+    opts.create ? 'readwrite' : 'read',
+  );
   if (!ok) {
-    throw new Error('Permission to read the folder was denied.');
+    throw new Error('Permission to the folder was denied.');
   }
+  const dir = handle as FileSystemDirectoryHandle & {
+    getDirectoryHandle: (
+      name: string,
+      opts?: { create?: boolean },
+    ) => Promise<FileSystemDirectoryHandle>;
+  };
+  try {
+    return await dir.getDirectoryHandle(name, { create: !!opts.create });
+  } catch (e) {
+    if ((e as Error).name === 'NotFoundError') return null;
+    throw e;
+  }
+}
 
+/**
+ * Scan a single directory handle for the most recently modified
+ * supported work-order export. Shared by readLatestReport for both the
+ * subfolder and the root-fallback passes.
+ */
+async function scanDirForLatestReport(
+  dir: FileSystemDirectoryHandle,
+): Promise<{
+  best: { file: File; name: string; lastModified: number; extension: string } | null;
+  totalCount: number;
+}> {
   const supported = ['.csv', '.xlsx', '.xls', '.json'];
   let best: {
     file: File;
@@ -156,10 +194,10 @@ export async function readLatestReport(): Promise<LatestReportResult | null> {
     extension: string;
   } | null = null;
   let totalCount = 0;
-  const dir = handle as FileSystemDirectoryHandle & {
+  const iterable = dir as FileSystemDirectoryHandle & {
     values: () => AsyncIterable<FileSystemHandle>;
   };
-  for await (const entry of dir.values()) {
+  for await (const entry of iterable.values()) {
     if (entry.kind !== 'file') continue;
     const lower = entry.name.toLowerCase();
     const matchedExt = supported.find((ext) => lower.endsWith(ext));
@@ -176,6 +214,68 @@ export async function readLatestReport(): Promise<LatestReportResult | null> {
       };
     }
   }
+  return { best, totalCount };
+}
+
+/**
+ * Find and read the most recently modified work order export in the
+ * connected folder. Scans for `.csv`, `.xlsx`, `.xls`, and `.json` so
+ * the same folder works whether your Power Automate flow drops Excel
+ * attachments or you export ServiceNow JSON manually. Returns null if
+ * no supported file is found.
+ *
+ * If `subfolder` is provided (e.g. 'reports'), that subfolder is scanned
+ * first. When the subfolder doesn't exist OR contains no supported file,
+ * it gracefully falls back to scanning the connected folder root — so
+ * existing setups (reports sitting in the root) keep working while the
+ * new `Data/reports/` layout is also supported.
+ */
+export async function readLatestReport(
+  subfolder?: string,
+): Promise<LatestReportResult | null> {
+  const handle = await idbGet<FileSystemDirectoryHandle>(KEY);
+  if (!handle) {
+    throw new Error('No folder connected. Connect a folder first.');
+  }
+  const ok = await ensurePermission(handle);
+  if (!ok) {
+    throw new Error('Permission to read the folder was denied.');
+  }
+
+  let best: {
+    file: File;
+    name: string;
+    lastModified: number;
+    extension: string;
+  } | null = null;
+  let totalCount = 0;
+  let scannedLocation = handle.name;
+
+  // First pass: the configured subfolder, if any.
+  const sub = (subfolder ?? '').trim();
+  if (sub) {
+    try {
+      const subHandle = await getSubfolderHandle(sub, { create: false });
+      if (subHandle) {
+        const res = await scanDirForLatestReport(subHandle);
+        if (res.best) {
+          best = res.best;
+          totalCount = res.totalCount;
+          scannedLocation = `${handle.name}/${sub}`;
+        }
+      }
+    } catch {
+      // Ignore subfolder errors and fall back to the root scan below.
+    }
+  }
+
+  // Fallback (or default) pass: the connected folder root.
+  if (!best) {
+    const res = await scanDirForLatestReport(handle);
+    best = res.best;
+    totalCount = res.totalCount;
+    scannedLocation = handle.name;
+  }
 
   if (!best) return null;
   return {
@@ -184,6 +284,7 @@ export async function readLatestReport(): Promise<LatestReportResult | null> {
     lastModified: best.lastModified,
     totalCount,
     extension: best.extension,
+    scannedLocation,
   };
 }
 

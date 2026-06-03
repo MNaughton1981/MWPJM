@@ -326,6 +326,22 @@ export interface Settings {
    * meeting prep without interfering with the Dashboard's active-WO list.
    */
   meetingNotesFilename?: string;
+  /**
+   * Name of the subfolder (under the connected Data folder) where photo
+   * files are stored, e.g. `…/Data/photos/`. Default 'photos'. This is
+   * a real, functional name — the app creates/uses the subfolder via the
+   * File System Access API; it is NOT a typed absolute path (the browser
+   * can't write to one of those). Used by the upcoming photo-sync feature.
+   */
+  photosSubfolder?: string;
+  /**
+   * Name of the subfolder (under the connected Data folder) where Nuvolo
+   * report exports (CSV/XLSX/JSON) are dropped, e.g. `…/Data/reports/`.
+   * Default 'reports'. When set and present, "Refresh from folder" scans
+   * it; if the subfolder is missing it gracefully falls back to scanning
+   * the connected folder root, so existing setups keep working.
+   */
+  reportsSubfolder?: string;
 }
 
 export interface AppData {

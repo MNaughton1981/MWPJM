@@ -48,6 +48,7 @@ export default function ReportsPage() {
   const workOrders = useStore((s) => s.workOrders);
   const setWorkOrders = useStore((s) => s.setWorkOrders);
   const reportFolderPath = useStore((s) => s.settings.reportFolderPath);
+  const reportsSubfolder = useStore((s) => s.settings.reportsSubfolder);
   const setSettings = useStore((s) => s.setSettings);
 
   const fileRef = useRef<HTMLInputElement>(null);
@@ -61,7 +62,7 @@ export default function ReportsPage() {
     getStoredFolderName().then(setConnectedFolder);
   }, []);
 
-  async function handleFile(file: File) {
+  async function handleFile(file: File, scannedLocation?: string) {
     setError(null);
     // Immediate feedback the instant a file is chosen — on mobile the
     // OneDrive picker closes and drops you back here with no native
@@ -85,7 +86,8 @@ export default function ReportsPage() {
         columnMap: map,
         rows: mapped,
       });
-      setInfo(`✓ Imported ${mapped.length} row(s) from "${file.name}".`);
+      const from = scannedLocation ? ` from ${scannedLocation}` : '';
+      setInfo(`✓ Imported ${mapped.length} row(s) from "${file.name}"${from}.`);
     } catch (e) {
       setInfo(null);
       setError(`Failed to parse file: ${(e as Error).message}`);
@@ -99,14 +101,17 @@ export default function ReportsPage() {
     setInfo(null);
     setRefreshing(true);
     try {
-      const result = await readLatestReport();
+      const result = await readLatestReport(reportsSubfolder);
       if (!result) {
+        const where = reportsSubfolder
+          ? `the "${reportsSubfolder}" subfolder or the connected folder`
+          : 'the connected folder';
         setError(
-          'No .csv / .xlsx / .json files found in the connected folder.',
+          `No .csv / .xlsx / .json files found in ${where}.`,
         );
         return;
       }
-      await handleFile(result.file);
+      await handleFile(result.file, result.scannedLocation);
     } catch (e) {
       setError((e as Error).message);
     } finally {
