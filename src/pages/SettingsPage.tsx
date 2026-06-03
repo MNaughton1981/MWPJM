@@ -33,6 +33,7 @@ const TOC_ITEMS: PageTOCItem[] = [
   { id: 'sec-nuvolo', label: 'Nuvolo email integration', icon: '🔗' },
   { id: 'sec-security', label: 'Security team notifications', icon: '🛡️' },
   { id: 'sec-folder', label: 'Nuvolo report folder path', icon: '📁' },
+  { id: 'sec-storage', label: 'Storage layout', icon: '🗂️' },
   { id: 'sec-photos', label: 'Photo naming pattern', icon: '🖼️' },
   { id: 'sec-sync', label: 'Sync state via OneDrive', icon: '🔄' },
   { id: 'sec-excel', label: 'Excel backend (new!)', icon: '📊' },
@@ -41,6 +42,20 @@ const TOC_ITEMS: PageTOCItem[] = [
   { id: 'sec-backup', label: 'Manual backup', icon: '💾' },
   { id: 'sec-about', label: 'About', icon: 'ℹ️' },
 ];
+
+/**
+ * Join a (display-only) base folder path with a subfolder name for the
+ * resolved-path previews in the Storage section. Detects the separator
+ * from the base (Windows backslash vs POSIX slash) and trims any
+ * trailing separators so we don't render `…\Data\\photos`.
+ */
+function joinPath(base: string, sub: string): string {
+  const cleanBase = (base || '').replace(/[\\/]+$/, '');
+  const cleanSub = (sub || '').replace(/^[\\/]+/, '');
+  if (!cleanBase) return '';
+  const sep = cleanBase.includes('/') && !cleanBase.includes('\\') ? '/' : '\\';
+  return `${cleanBase}${sep}${cleanSub}`;
+}
 
 export default function SettingsPage() {
   const settings = useStore((s) => s.settings);
@@ -404,6 +419,102 @@ export default function SettingsPage() {
               Reports → Connect folder
             </Link>{' '}
             to grant the app permission (Chrome / Edge only).
+          </p>
+        </div>
+      </section>
+
+      <section id="sec-storage" className="card p-4 space-y-3 scroll-mt-20">
+        <div>
+          <h2 className="font-semibold">Storage layout</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Everything the app stores lives under one connected{' '}
+            <strong>Data folder</strong>, organized into subfolders. The Data
+            folder itself is whatever you grant access to via{' '}
+            <Link to="/reports" className="text-brand-600 hover:underline">
+              Reports → Connect folder
+            </Link>{' '}
+            (Chrome / Edge on desktop). The subfolder <em>names</em> below are
+            real — the app creates and uses them inside that folder. The full
+            paths shown are read-only reminders (the browser can't write to a
+            typed path directly).
+          </p>
+        </div>
+
+        <div>
+          <label className="label">Data folder path (display-only reminder)</label>
+          <input
+            className="input font-mono text-xs"
+            placeholder="C:\Users\you\OneDrive - MathWorks\…\Workboard\Data"
+            value={settings.reportFolderPath}
+            onChange={(e) => setSettings({ reportFolderPath: e.target.value })}
+          />
+          <p className="text-[11px] text-slate-500 mt-1">
+            The <code>MWPJM-Data.xlsx</code> workbook is written directly into
+            this folder. Subfolders below branch off it.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="label">Photos subfolder</label>
+            <input
+              className="input font-mono text-sm"
+              placeholder="photos"
+              value={settings.photosSubfolder ?? ''}
+              onChange={(e) => setSettings({ photosSubfolder: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label">Reports subfolder</label>
+            <input
+              className="input font-mono text-sm"
+              placeholder="reports"
+              value={settings.reportsSubfolder ?? ''}
+              onChange={(e) => setSettings({ reportsSubfolder: e.target.value })}
+            />
+          </div>
+        </div>
+
+        {/* Resolved-path previews — read-only reminders so the user can
+            confirm the layout matches the folders they created. */}
+        <div className="text-[11px] bg-slate-50 border border-slate-200 rounded p-3 space-y-1.5 font-mono break-all">
+          <div>
+            📊 Data file:{' '}
+            <span className="text-slate-700">
+              {settings.reportFolderPath
+                ? joinPath(settings.reportFolderPath, 'MWPJM-Data.xlsx')
+                : '…\\Data\\MWPJM-Data.xlsx'}
+            </span>
+          </div>
+          <div>
+            🖼️ Photos:{' '}
+            <span className="text-slate-700">
+              {settings.reportFolderPath
+                ? joinPath(settings.reportFolderPath, settings.photosSubfolder || 'photos') + '\\'
+                : `…\\Data\\${settings.photosSubfolder || 'photos'}\\`}
+            </span>
+          </div>
+          <div>
+            📁 Reports:{' '}
+            <span className="text-slate-700">
+              {settings.reportFolderPath
+                ? joinPath(settings.reportFolderPath, settings.reportsSubfolder || 'reports') + '\\'
+                : `…\\Data\\${settings.reportsSubfolder || 'reports'}\\`}
+            </span>
+          </div>
+        </div>
+
+        <div className="text-[11px] text-slate-600 bg-blue-50 border border-blue-200 rounded p-2 space-y-1">
+          <p>
+            <strong>Reports subfolder is live now:</strong> "Refresh from
+            folder" scans <code>{settings.reportsSubfolder || 'reports'}</code>{' '}
+            first, then falls back to the Data folder root if that subfolder
+            isn't there yet — so existing setups keep working.
+          </p>
+          <p>
+            <strong>Photos subfolder</strong> is captured here and used by the
+            upcoming photo-sync feature (Phase 2b) — setting it now means it's
+            ready when that lands.
           </p>
         </div>
       </section>
