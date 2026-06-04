@@ -22,6 +22,29 @@ const CREATED_LABELS: Record<CreatedFilter, string> = {
 };
 
 /**
+ * Module-scoped cache of the Dashboard's filter / search selections.
+ *
+ * DashboardPage unmounts when you navigate away (into a workboard, to
+ * Reports, etc.) and remounts when you come back — which would normally
+ * reset every filter to its default and force you to re-apply them.
+ * Stashing the selections at module scope lets them survive that
+ * remount for the session, so the Dashboard comes back exactly how you
+ * left it. Session-scoped by design: a full app reload starts clean,
+ * which matches the usual "fresh slate when I reopen" expectation.
+ */
+const dashboardFilterCache: {
+  search: string;
+  stateFilter: string;
+  assignees: string[];
+  createdFilter: CreatedFilter;
+} = {
+  search: '',
+  stateFilter: '',
+  assignees: [],
+  createdFilter: '',
+};
+
+/**
  * Map work order state to a color class for the card header bar.
  * Open states = blue, in-progress = amber, closed/resolved = slate.
  */
@@ -112,12 +135,25 @@ export default function DashboardPage() {
   // and seeds those into the set. There's no "Me" sentinel — the
   // selection is always concrete CSV names, which makes the "Showing
   // N of M" pill and the multi-select popover share one mental model.
-  const [filter, setFilter] = useState('');
-  const [stateFilter, setStateFilter] = useState<string>('');
-  const [assignedFilter, setAssignedFilter] = useState<Set<string>>(
-    () => new Set(),
+  const [filter, setFilter] = useState(() => dashboardFilterCache.search);
+  const [stateFilter, setStateFilter] = useState<string>(
+    () => dashboardFilterCache.stateFilter,
   );
-  const [createdFilter, setCreatedFilter] = useState<CreatedFilter>('');
+  const [assignedFilter, setAssignedFilter] = useState<Set<string>>(
+    () => new Set(dashboardFilterCache.assignees),
+  );
+  const [createdFilter, setCreatedFilter] = useState<CreatedFilter>(
+    () => dashboardFilterCache.createdFilter,
+  );
+
+  // Persist the current selections to the module-scope cache so they
+  // survive navigating away and back (see dashboardFilterCache doc).
+  useEffect(() => {
+    dashboardFilterCache.search = filter;
+    dashboardFilterCache.stateFilter = stateFilter;
+    dashboardFilterCache.assignees = [...assignedFilter];
+    dashboardFilterCache.createdFilter = createdFilter;
+  }, [filter, stateFilter, assignedFilter, createdFilter]);
 
   function startProjectFromWO(wo: WorkOrder) {
     // Dedupe by FWKD — if a workboard already exists for this work
