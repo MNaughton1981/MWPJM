@@ -391,5 +391,7 @@ export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
   planning: 'Planning',
   in_progress: 'In progress',
   on_hold: 'On hold',
-  complete: 'Complete',
+  // Labeled "Closed" to mirror Nuvolo's work-order states. The internal
+  // value stays 'complete' (no data migration); only the display changes.
+  complete: 'Closed',
 };

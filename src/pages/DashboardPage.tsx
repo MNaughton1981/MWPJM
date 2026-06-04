@@ -46,7 +46,8 @@ const dashboardFilterCache: {
 
 /**
  * Map work order state to a color class for the card header bar.
- * Open states = blue, in-progress = amber, closed/resolved = slate.
+ * Open states = blue, in-progress = muted olive (#98B06F),
+ * closed/resolved = slate.
  */
 function getStateColor(state: string): string {
   const s = state?.toLowerCase() || '';
@@ -54,7 +55,7 @@ function getStateColor(state: string): string {
     return 'bg-blue-500 text-white';
   }
   if (s.includes('progress') || s.includes('work') || s.includes('assigned')) {
-    return 'bg-amber-500 text-white';
+    return 'bg-[#98B06F] text-white';
   }
   if (s.includes('closed') || s.includes('resolved') || s.includes('complete')) {
     return 'bg-slate-500 text-white';
