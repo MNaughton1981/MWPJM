@@ -557,7 +557,7 @@ export default function ProjectsPage() {
           {renderSection('in_progress', 'In progress', '🔵', buckets.in_progress)}
           {renderSection('on_hold', 'Parked / On hold', '⏸', buckets.on_hold)}
           {renderSection('planning', 'Planning', '🗓', buckets.planning)}
-          {renderSection('complete', 'Complete', '✅', buckets.complete)}
+          {renderSection('complete', 'Closed', '✅', buckets.complete)}
         </div>
       )}
 
