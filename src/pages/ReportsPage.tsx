@@ -49,6 +49,7 @@ export default function ReportsPage() {
   const setWorkOrders = useStore((s) => s.setWorkOrders);
   const reportFolderPath = useStore((s) => s.settings.reportFolderPath);
   const reportsSubfolder = useStore((s) => s.settings.reportsSubfolder);
+  const syncFilename = useStore((s) => s.settings.syncFilename);
   const setSettings = useStore((s) => s.setSettings);
 
   const fileRef = useRef<HTMLInputElement>(null);
@@ -101,7 +102,9 @@ export default function ReportsPage() {
     setInfo(null);
     setRefreshing(true);
     try {
-      const result = await readLatestReport(reportsSubfolder);
+      const result = await readLatestReport(reportsSubfolder, [
+        syncFilename || 'mwpjm-state.json',
+      ]);
       if (!result) {
         const where = reportsSubfolder
           ? `the "${reportsSubfolder}" subfolder or the connected folder`

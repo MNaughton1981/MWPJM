@@ -182,11 +182,13 @@ export async function getSubfolderHandle(
  */
 async function scanDirForLatestReport(
   dir: FileSystemDirectoryHandle,
+  ignoreNames: string[] = [],
 ): Promise<{
   best: { file: File; name: string; lastModified: number; extension: string } | null;
   totalCount: number;
 }> {
   const supported = ['.csv', '.xlsx', '.xls', '.json'];
+  const ignore = new Set(ignoreNames.map((n) => n.toLowerCase()));
   let best: {
     file: File;
     name: string;
@@ -202,6 +204,11 @@ async function scanDirForLatestReport(
     const lower = entry.name.toLowerCase();
     const matchedExt = supported.find((ext) => lower.endsWith(ext));
     if (!matchedExt) continue;
+    // Skip the app's own files (the Excel data workbook + the JSON sync
+    // snapshot). Without this, "Refresh" can grab MWPJM-Data.xlsx or
+    // mwpjm-state.json when the connected folder also holds them, and
+    // the parser then (correctly) rejects them as non-report files.
+    if (ignore.has(lower)) continue;
     totalCount++;
     const fileHandle = entry as FileSystemFileHandle;
     const f = await fileHandle.getFile();
@@ -232,6 +239,7 @@ async function scanDirForLatestReport(
  */
 export async function readLatestReport(
   subfolder?: string,
+  ignoreNames: string[] = [],
 ): Promise<LatestReportResult | null> {
   const handle = await idbGet<FileSystemDirectoryHandle>(KEY);
   if (!handle) {
@@ -241,6 +249,10 @@ export async function readLatestReport(
   if (!ok) {
     throw new Error('Permission to read the folder was denied.');
   }
+
+  // Always skip the app's own data workbook; callers add the configured
+  // sync filename (default mwpjm-state.json) on top. Lowercased compare.
+  const ignore = ['mwpjm-data.xlsx', ...ignoreNames];
 
   let best: {
     file: File;
@@ -257,7 +269,7 @@ export async function readLatestReport(
     try {
       const subHandle = await getSubfolderHandle(sub, { create: false });
       if (subHandle) {
-        const res = await scanDirForLatestReport(subHandle);
+        const res = await scanDirForLatestReport(subHandle, ignore);
         if (res.best) {
           best = res.best;
           totalCount = res.totalCount;
@@ -271,7 +283,7 @@ export async function readLatestReport(
 
   // Fallback (or default) pass: the connected folder root.
   if (!best) {
-    const res = await scanDirForLatestReport(handle);
+    const res = await scanDirForLatestReport(handle, ignore);
     best = res.best;
     totalCount = res.totalCount;
     scannedLocation = handle.name;
