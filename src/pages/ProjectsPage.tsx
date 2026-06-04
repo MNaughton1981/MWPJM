@@ -3,11 +3,20 @@ import { format } from 'date-fns';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useStore } from '../state/store';
 import { TEMPLATES } from '../data/templates';
-import { PROJECT_STATUS_LABELS } from '../types';
+import { PROJECT_STATUS_LABELS, type Project } from '../types';
 import { formatDateTime, workboardNumber } from '../lib/format';
 import { allProjectsToOneOnOneSummary } from '../lib/exporters';
 import { parseWorkOrderFile, applyColumnMap, autoDetectColumns } from '../lib/workOrderCsv';
 import SyncQuickActions from '../components/SyncQuickActions';
+
+/**
+ * Session-sticky collapse state for the Workboards bucket sections.
+ * Keyed by bucket id; true = collapsed. Survives navigating away and
+ * back within the session (same idea as the Dashboard filter cache).
+ * "Complete" starts collapsed so finished work doesn't crowd out what
+ * you're actively touching.
+ */
+const bucketCollapseCache: Record<string, boolean> = { complete: true };
 
 /**
  * Workboards list page.
@@ -63,38 +72,64 @@ export default function ProjectsPage() {
     [projects],
   );
 
-  // Filter to either active (default) or archived (toggle) before
-  // sorting, so the rest of the render code is identical for both
-  // modes — just the button row at the top of each row differs.
-  //
-  // Active list sort order:
-  //   1. Pinned workboards first, most recently pinned at the top.
-  //   2. Then unpinned, by updatedAt desc as before.
-  // The pinned section gets a subtle visual treatment (📌 icon and a
-  // light amber tint on the card border) so the user can tell at a
-  // glance that those rows are stuck at the top by intent.
-  //
-  // Archived list ignores pin state — pin/unpin is for keeping things
-  // visible at the top of the *active* working list, not for re-
-  // ranking historical archived items.
-  const sorted = useMemo(() => {
-    const filtered = projects.filter((p) =>
-      showArchived ? !!p.archivedAt : !p.archivedAt,
-    );
-    if (showArchived) {
-      return filtered.sort(
-        (a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0),
-      );
-    }
-    return filtered.sort((a, b) => {
-      const aPinned = a.pinnedAt ?? 0;
-      const bPinned = b.pinnedAt ?? 0;
-      if (aPinned !== bPinned) return bPinned - aPinned;
-      return (
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-      );
+  // Active vs archived split. Archived stays a flat, most-recently-
+  // archived-first list. Active is grouped into buckets below.
+  const activeProjects = useMemo(
+    () => projects.filter((p) => !p.archivedAt),
+    [projects],
+  );
+  const archivedList = useMemo(
+    () =>
+      projects
+        .filter((p) => !!p.archivedAt)
+        .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0)),
+    [projects],
+  );
+
+  // Focus / Today lane: pinned active workboards, most recently pinned
+  // first. Pinning is the "I'm touching this right now" flag — distinct
+  // from status, so a board can be In progress AND in Focus. Pinned
+  // boards live ONLY here (not duplicated in their status bucket).
+  const focusItems = useMemo(
+    () =>
+      activeProjects
+        .filter((p) => !!p.pinnedAt)
+        .sort(
+          (a, b) =>
+            (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0) ||
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+        ),
+    [activeProjects],
+  );
+
+  // Unpinned active workboards grouped by status into collapsible
+  // buckets ("dropdown dashboards"), each sorted most-recently-updated.
+  const buckets = useMemo(() => {
+    const unpinned = activeProjects.filter((p) => !p.pinnedAt);
+    const byUpdated = (a: Project, b: Project) =>
+      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    const group = (status: Project['status']) =>
+      unpinned.filter((p) => p.status === status).sort(byUpdated);
+    return {
+      in_progress: group('in_progress'),
+      on_hold: group('on_hold'),
+      planning: group('planning'),
+      complete: group('complete'),
+    };
+  }, [activeProjects]);
+
+  // Collapse state per bucket, seeded from + written back to the
+  // module cache so it survives navigating away and back.
+  const [collapsedBuckets, setCollapsedBuckets] = useState<
+    Record<string, boolean>
+  >(() => ({ ...bucketCollapseCache }));
+  function toggleBucket(id: string) {
+    setCollapsedBuckets((prev) => {
+      const next = { ...prev, [id]: !prev[id] };
+      bucketCollapseCache[id] = next[id];
+      return next;
     });
-  }, [projects, showArchived]);
+  }
 
   function createProject() {
     const name = newName.trim();
@@ -207,6 +242,145 @@ export default function ProjectsPage() {
     togglePinProject(projectId);
   }
 
+  // A single workboard row. Shared by every bucket section and the
+  // archived list so the card markup lives in exactly one place.
+  const renderRow = (p: Project) => {
+    const isPinned = !!p.pinnedAt;
+    return (
+      <li key={p.id}>
+        <Link
+          to={`/projects/${p.id}`}
+          className={`block card p-4 hover:border-brand-500 hover:shadow transition ${
+            showArchived ? 'opacity-80' : ''
+          } ${
+            !showArchived && isPinned ? 'border-amber-300 bg-amber-50/40' : ''
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="font-semibold truncate flex items-center gap-1.5">
+                {!showArchived && isPinned && (
+                  <span
+                    className="text-amber-600 shrink-0"
+                    title="In Focus / Today"
+                    aria-label="In Focus"
+                  >
+                    📌
+                  </span>
+                )}
+                <span className="truncate">{p.name}</span>
+              </div>
+              <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                <span
+                  className="font-mono text-slate-600"
+                  title="Workboard ID — stable across devices via sync"
+                >
+                  {workboardNumber(p.id)}
+                </span>
+                {p.workOrderId ? (
+                  <span>WO: {p.workOrderId}</span>
+                ) : (
+                  <span className="text-amber-700">WO: not linked</span>
+                )}
+                {p.location && <span>{p.location}</span>}
+                <span>
+                  {showArchived && p.archivedAt
+                    ? `Archived ${formatDateTime(
+                        new Date(p.archivedAt).toISOString(),
+                      )}`
+                    : `Updated ${formatDateTime(p.updatedAt)}`}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="pill bg-slate-100 text-slate-700">
+                {PROJECT_STATUS_LABELS[p.status]}
+              </span>
+              {!showArchived && (
+                <button
+                  type="button"
+                  className={`text-base leading-none w-8 h-8 rounded-md flex items-center justify-center transition ${
+                    isPinned
+                      ? 'text-amber-600 hover:bg-amber-100'
+                      : 'text-slate-400 hover:text-amber-600 hover:bg-slate-100'
+                  }`}
+                  onClick={(e) => handleTogglePin(e, p.id)}
+                  title={
+                    isPinned
+                      ? 'Remove from Focus / Today'
+                      : 'Add to Focus / Today (what you’re touching now)'
+                  }
+                  aria-label={isPinned ? 'Remove from Focus' : 'Add to Focus'}
+                  aria-pressed={isPinned}
+                >
+                  {isPinned ? '📌' : '📍'}
+                </button>
+              )}
+              {showArchived && (
+                <button
+                  type="button"
+                  className="btn-secondary text-xs"
+                  onClick={(e) => handleUnarchive(e, p.id)}
+                  title="Restore this workboard to your active list"
+                >
+                  ↩ Unarchive
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-3 text-xs text-slate-500">
+            <span>
+              {p.milestones.filter((m) => m.done).length}/
+              {p.milestones.length} milestones
+            </span>
+            <span>·</span>
+            <span>{p.trades.length} trades</span>
+            <span>·</span>
+            <span>{p.activity.length} updates</span>
+          </div>
+        </Link>
+      </li>
+    );
+  };
+
+  // A collapsible bucket section ("dropdown dashboard"). Renders nothing
+  // when empty so the page only shows buckets that have workboards.
+  const renderSection = (
+    id: string,
+    label: string,
+    icon: string,
+    items: Project[],
+  ) => {
+    if (items.length === 0) return null;
+    const isCollapsed = !!collapsedBuckets[id];
+    return (
+      <section key={id} className="space-y-2">
+        <button
+          type="button"
+          onClick={() => toggleBucket(id)}
+          className="w-full flex items-center gap-2 text-left py-1"
+          aria-expanded={!isCollapsed}
+        >
+          <span
+            aria-hidden
+            className="text-slate-400 w-3 inline-block text-xs"
+          >
+            {isCollapsed ? '▸' : '▾'}
+          </span>
+          <span className="text-sm font-semibold text-slate-700">
+            {icon} {label}
+          </span>
+          <span className="text-xs font-normal text-slate-400">
+            ({items.length})
+          </span>
+        </button>
+        {!isCollapsed && (
+          <ul className="space-y-2">{items.map((p) => renderRow(p))}</ul>
+        )}
+      </section>
+    );
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -225,7 +399,7 @@ export default function ProjectsPage() {
               the device — only renders the buttons that can actually
               do something there. */}
           <SyncQuickActions />
-          {!showArchived && sorted.length > 0 && (
+          {!showArchived && activeProjects.length > 0 && (
             <>
               <button
                 className="btn-ghost text-xs"
@@ -350,139 +524,41 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {sorted.length === 0 ? (
+      {showArchived ? (
+        archivedList.length === 0 ? (
+          <div className="card p-8 text-center text-slate-500">
+            <p className="mb-2">No archived workboards.</p>
+            <p className="text-sm">
+              Archive a finished workboard from its page to clean up your
+              active list without losing the documentation.
+            </p>
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {archivedList.map((p) => renderRow(p))}
+          </ul>
+        )
+      ) : activeProjects.length === 0 ? (
         <div className="card p-8 text-center text-slate-500">
-          {showArchived ? (
-            <>
-              <p className="mb-2">No archived workboards.</p>
-              <p className="text-sm">
-                Archive a finished workboard from its page to clean up
-                your active list without losing the documentation.
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="mb-2">Nothing tracked yet.</p>
-              <p className="text-sm">
-                Tap <strong>📝 Quick Workboard</strong> to drop straight into
-                a blank one (great for on-call), or{' '}
-                <strong>+ New Workboard</strong> to start from a template. You
-                can also jump to the{' '}
-                <Link to="/dashboard" className="text-brand-600 hover:underline">
-                  Dashboard
-                </Link>{' '}
-                and pick a row to spin up a quick follow-up.
-              </p>
-            </>
-          )}
+          <p className="mb-2">Nothing tracked yet.</p>
+          <p className="text-sm">
+            Tap <strong>📝 Quick Workboard</strong> to drop straight into a
+            blank one (great for on-call), or <strong>+ New Workboard</strong>{' '}
+            to start from a template. You can also jump to the{' '}
+            <Link to="/dashboard" className="text-brand-600 hover:underline">
+              Dashboard
+            </Link>{' '}
+            and pick a row to spin up a quick follow-up.
+          </p>
         </div>
       ) : (
-        <ul className="space-y-2">
-          {sorted.map((p) => {
-            const isPinned = !!p.pinnedAt;
-            return (
-            <li key={p.id}>
-              <Link
-                to={`/projects/${p.id}`}
-                className={`block card p-4 hover:border-brand-500 hover:shadow transition ${
-                  showArchived ? 'opacity-80' : ''
-                } ${
-                  // Subtle amber border on pinned rows so the user can
-                  // see at a glance that this row is stuck at the top
-                  // by intent, not just because it's the most recently
-                  // updated.
-                  !showArchived && isPinned
-                    ? 'border-amber-300 bg-amber-50/40'
-                    : ''
-                }`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="font-semibold truncate flex items-center gap-1.5">
-                      {!showArchived && isPinned && (
-                        <span
-                          className="text-amber-600 shrink-0"
-                          title="Pinned to top"
-                          aria-label="Pinned to top"
-                        >
-                          📌
-                        </span>
-                      )}
-                      <span className="truncate">{p.name}</span>
-                    </div>
-                    <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
-                      <span
-                        className="font-mono text-slate-600"
-                        title="Workboard ID — stable across devices via sync"
-                      >
-                        {workboardNumber(p.id)}
-                      </span>
-                      {p.workOrderId ? (
-                        <span>WO: {p.workOrderId}</span>
-                      ) : (
-                        <span className="text-amber-700">WO: not linked</span>
-                      )}
-                      {p.location && <span>{p.location}</span>}
-                      <span>
-                        {showArchived && p.archivedAt
-                          ? `Archived ${formatDateTime(
-                              new Date(p.archivedAt).toISOString(),
-                            )}`
-                          : `Updated ${formatDateTime(p.updatedAt)}`}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="pill bg-slate-100 text-slate-700">
-                      {PROJECT_STATUS_LABELS[p.status]}
-                    </span>
-                    {!showArchived && (
-                      <button
-                        type="button"
-                        className={`text-base leading-none w-8 h-8 rounded-md flex items-center justify-center transition ${
-                          isPinned
-                            ? 'text-amber-600 hover:bg-amber-100'
-                            : 'text-slate-400 hover:text-amber-600 hover:bg-slate-100'
-                        }`}
-                        onClick={(e) => handleTogglePin(e, p.id)}
-                        title={
-                          isPinned
-                            ? 'Unpin — return to normal sort order'
-                            : 'Pin to top of Workboards list'
-                        }
-                        aria-label={isPinned ? 'Unpin workboard' : 'Pin workboard'}
-                        aria-pressed={isPinned}
-                      >
-                        {isPinned ? '📌' : '📍'}
-                      </button>
-                    )}
-                    {showArchived && (
-                      <button
-                        type="button"
-                        className="btn-secondary text-xs"
-                        onClick={(e) => handleUnarchive(e, p.id)}
-                        title="Restore this workboard to your active list"
-                      >
-                        ↩ Unarchive
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-3 flex items-center gap-3 text-xs text-slate-500">
-                  <span>
-                    {p.milestones.filter((m) => m.done).length}/
-                    {p.milestones.length} milestones
-                  </span>
-                  <span>·</span>
-                  <span>{p.trades.length} trades</span>
-                  <span>·</span>
-                  <span>{p.activity.length} updates</span>
-                </div>
-              </Link>
-            </li>
-            );
-          })}
-        </ul>
+        <div className="space-y-5">
+          {renderSection('focus', 'Focus / Today', '📌', focusItems)}
+          {renderSection('in_progress', 'In progress', '🔵', buckets.in_progress)}
+          {renderSection('on_hold', 'Parked / On hold', '⏸', buckets.on_hold)}
+          {renderSection('planning', 'Planning', '🗓', buckets.planning)}
+          {renderSection('complete', 'Complete', '✅', buckets.complete)}
+        </div>
       )}
 
       {/* View toggle — small footer link rather than a tab/button row,
