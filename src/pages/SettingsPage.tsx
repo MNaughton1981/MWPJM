@@ -23,6 +23,7 @@ import {
 import { formatDateTime } from '../lib/format';
 import PageTOC, { type PageTOCItem } from '../components/PageTOC';
 import { migrateToExcel, verifyExcelFile } from '../lib/migrateToExcel';
+import { setupWorkboardFolders } from '../lib/folderConnection';
 
 // TOC items mirror the order of <section> tags below. Each section
 // has an id matching one of these entries so the picker scrolls to
@@ -77,6 +78,8 @@ export default function SettingsPage() {
   const [excelExists, setExcelExists] = useState(false);
   const [excelProjectsCount, setExcelProjectsCount] = useState<number>(0);
   const [excelMigrating, setExcelMigrating] = useState(false);
+  const [setupMsg, setSetupMsg] = useState<string | null>(null);
+  const [settingUp, setSettingUp] = useState(false);
   const [connectedFolder, setConnectedFolder] = useState<string | undefined>();
   const [busy, setBusy] = useState<'push' | 'pull' | null>(null);
   const folderApi = isFolderApiSupported();
@@ -123,6 +126,31 @@ export default function SettingsPage() {
       setExcelMsg(`✗ Migration failed: ${(e as Error).message}`);
     } finally {
       setExcelMigrating(false);
+    }
+  }
+
+  async function handleSetupFolders() {
+    if (settingUp) return;
+    setSettingUp(true);
+    setSetupMsg(null);
+    try {
+      const result = await setupWorkboardFolders(
+        settings.photosSubfolder || 'photos',
+        settings.reportsSubfolder || 'reports',
+        'meeting-reports',
+      );
+      const parts: string[] = [];
+      if (result.created.length > 0) {
+        parts.push(`Created: ${result.created.join(', ')}`);
+      }
+      if (result.alreadyExisted.length > 0) {
+        parts.push(`Already existed: ${result.alreadyExisted.join(', ')}`);
+      }
+      setSetupMsg(`✓ ${parts.join('. ')}.`);
+    } catch (e) {
+      setSetupMsg(`✗ Setup failed: ${(e as Error).message}`);
+    } finally {
+      setSettingUp(false);
     }
   }
 
@@ -517,6 +545,22 @@ export default function SettingsPage() {
             ready when that lands.
           </p>
         </div>
+
+        {folderApi && connectedFolder && (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              className="btn-secondary text-sm"
+              onClick={handleSetupFolders}
+              disabled={settingUp}
+              title="Create photos/, reports/, and meeting-reports/ subfolders in your connected Data folder (one-tap setup for new users)"
+            >
+              {settingUp ? 'Setting up…' : '🗂️ Set up folders'}
+            </button>
+            {setupMsg && (
+              <span className="text-xs text-slate-700">{setupMsg}</span>
+            )}
+          </div>
+        )}
       </section>
 
       <section id="sec-photos" className="card p-4 space-y-3 scroll-mt-20">

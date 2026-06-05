@@ -381,3 +381,46 @@ export async function readFileFromFolder(
     throw e;
   }
 }
+
+
+// ---------- One-tap folder setup ----------
+//
+// Creates the standard subfolder structure inside the connected Data
+// folder + seeds MWPJM-Data.xlsx if it doesn't exist. Called from
+// Settings -> "Set up folders" button. Requires a connected folder
+// with readwrite permission.
+
+export interface SetupResult {
+  created: string[];
+  alreadyExisted: string[];
+  error?: string;
+}
+
+/**
+ * Create the standard subfolder structure and seed the Excel workbook.
+ * Returns which subfolders were created vs. already existed.
+ */
+export async function setupWorkboardFolders(
+  photosSubfolder: string,
+  reportsSubfolder: string,
+  meetingReportsSubfolder: string,
+): Promise<SetupResult> {
+  const created: string[] = [];
+  const alreadyExisted: string[] = [];
+
+  const folders = [photosSubfolder, reportsSubfolder, meetingReportsSubfolder];
+
+  for (const name of folders) {
+    if (!name.trim()) continue;
+    // Check if it exists first
+    const existing = await getSubfolderHandle(name, { create: false });
+    if (existing) {
+      alreadyExisted.push(name);
+    } else {
+      await getSubfolderHandle(name, { create: true });
+      created.push(name);
+    }
+  }
+
+  return { created, alreadyExisted };
+}
