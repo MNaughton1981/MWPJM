@@ -382,34 +382,31 @@ export default function ProjectsPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="text-xl font-semibold">
-          Workboards
-          {showArchived && (
-            <span className="ml-2 text-sm font-normal text-slate-500">
-              · Archived
-            </span>
-          )}
-        </h1>
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Quick sync controls so the user doesn't have to hop into
-              Settings just to pull the latest state from the desktop or
-              push from the desktop on demand. The component adapts to
-              the device — only renders the buttons that can actually
-              do something there. */}
+    <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <h1 className="text-xl font-semibold">
+            Workboards
+            {showArchived && (
+              <span className="ml-2 text-sm font-normal text-slate-500">
+                · Archived
+              </span>
+            )}
+          </h1>
+          {/* Sync controls beside the title so they don't crowd the buttons */}
           <SyncQuickActions />
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
           {!showArchived && activeProjects.length > 0 && (
             <>
               <button
-                className="btn-ghost text-xs"
+                className="btn-secondary text-xs w-full sm:w-auto"
                 onClick={() => setShowMeetingNotesImport(v => !v)}
                 title="Load a filtered CSV (closed work orders) for meeting prep"
               >
                 {meetingNotesOrders ? '✓ CSV Loaded' : '📁 Load Meeting CSV'}
               </button>
               <button
-                className="btn-secondary text-xs"
+                className="btn-secondary text-xs w-full sm:w-auto"
                 onClick={exportAll1on1Summaries}
                 title={meetingNotesOrders 
                   ? "Export all active workboards merged with loaded CSV data" 
@@ -420,14 +417,14 @@ export default function ProjectsPage() {
             </>
           )}
           <button
-            className="btn-primary"
+            className="btn-primary text-xs w-full sm:w-auto"
             onClick={createQuickWorkboard}
             title="One-tap blank workboard for on-call / drop-in work — name + WO# can be filled in later"
           >
             📝 Quick Workboard
           </button>
           <button
-            className="btn-secondary"
+            className="btn-secondary text-xs w-full sm:w-auto"
             onClick={() => setShowNew((v) => !v)}
             title="Pick a name and template (use this for full projects like the kitchenette pilot)"
           >
