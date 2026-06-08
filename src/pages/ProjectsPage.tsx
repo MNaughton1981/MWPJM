@@ -431,7 +431,6 @@ export default function ProjectsPage() {
             {showNew ? 'Cancel' : '+ New Workboard'}
           </button>
         </div>
-      </div>
 
       {exportStatus && (
         <div className="card p-3 bg-brand-50 border-brand-200 text-sm text-brand-800">
