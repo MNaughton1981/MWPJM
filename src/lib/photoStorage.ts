@@ -188,3 +188,47 @@ export async function loadProjectPhotoFiles(
   }
   return files;
 }
+
+
+// ---------- recovery: enumerate all stored blobs ----------
+
+export interface StoredPhotoBlob {
+  /** Raw IndexedDB key: `${projectId}/${photoId}`. */
+  key: string;
+  projectId: string;
+  photoId: string;
+  blob: Blob;
+}
+
+/**
+ * Read every photo blob currently in IndexedDB, regardless of whether a
+ * matching project still exists in the store. Used by the photo-recovery
+ * tool to surface "orphaned" blobs whose workboard was overwritten (e.g.
+ * by a cross-device sync import) or deleted. Strictly read-only — it
+ * never mutates or removes anything.
+ */
+export async function listAllPhotos(): Promise<StoredPhotoBlob[]> {
+  const db = await openDb();
+  return new Promise<StoredPhotoBlob[]>((resolve, reject) => {
+    const out: StoredPhotoBlob[] = [];
+    const tx = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).openCursor();
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (!cursor) {
+        resolve(out);
+        return;
+      }
+      const k = String(cursor.key);
+      const slash = k.indexOf('/');
+      out.push({
+        key: k,
+        projectId: slash >= 0 ? k.slice(0, slash) : k,
+        photoId: slash >= 0 ? k.slice(slash + 1) : '',
+        blob: cursor.value as Blob,
+      });
+      cursor.continue();
+    };
+    req.onerror = () => reject(req.error);
+  });
+}

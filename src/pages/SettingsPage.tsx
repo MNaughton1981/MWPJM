@@ -24,6 +24,7 @@ import { formatDateTime } from '../lib/format';
 import PageTOC, { type PageTOCItem } from '../components/PageTOC';
 import { migrateToExcel, verifyExcelFile } from '../lib/migrateToExcel';
 import { setupWorkboardFolders } from '../lib/folderConnection';
+import PhotoRecoverySection from '../components/PhotoRecoverySection';
 
 // TOC items mirror the order of <section> tags below. Each section
 // has an id matching one of these entries so the picker scrolls to
@@ -41,6 +42,7 @@ const TOC_ITEMS: PageTOCItem[] = [
   { id: 'sec-vendor-book', label: 'Vendor book', icon: '📒' },
   { id: 'sec-vendor-events', label: 'Vendor events', icon: '📅' },
   { id: 'sec-backup', label: 'Manual backup', icon: '💾' },
+  { id: 'sec-recovery', label: 'Recover photos', icon: '🛟' },
   { id: 'sec-about', label: 'About', icon: 'ℹ️' },
 ];
 
@@ -984,6 +986,8 @@ export default function SettingsPage() {
           snapshots and migrating between accounts.
         </p>
       </section>
+
+      <PhotoRecoverySection />
 
       <section id="sec-about" className="card p-4 space-y-2 scroll-mt-20">
         <h2 className="font-semibold">About</h2>
