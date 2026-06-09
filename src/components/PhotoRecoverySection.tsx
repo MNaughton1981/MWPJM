@@ -237,9 +237,30 @@ export default function PhotoRecoverySection() {
 
       {orphanedDrafts.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-slate-800">
-            Leftover notes from lost workboards
-          </h3>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h3 className="text-sm font-semibold text-slate-800">
+              Leftover notes from lost workboards
+            </h3>
+            <button
+              className="btn-primary text-xs"
+              onClick={() => {
+                const all = orphanedDrafts
+                  .map(
+                    ([pid, text], i) =>
+                      `--- Note ${i + 1} (id: ${pid}) ---\n${text}`,
+                  )
+                  .join('\n\n');
+                if (navigator.clipboard) {
+                  void navigator.clipboard.writeText(all);
+                  setMsg(
+                    `Copied all ${orphanedDrafts.length} leftover note(s) to the clipboard.`,
+                  );
+                }
+              }}
+            >
+              ⧉ Copy all notes
+            </button>
+          </div>
           <p className="text-xs text-slate-500">
             Unsent text from a workboard's update box that outlived the
             workboard itself. Copy anything you need.
