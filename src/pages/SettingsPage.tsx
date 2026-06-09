@@ -25,6 +25,7 @@ import PageTOC, { type PageTOCItem } from '../components/PageTOC';
 import { migrateToExcel, verifyExcelFile } from '../lib/migrateToExcel';
 import { setupWorkboardFolders } from '../lib/folderConnection';
 import PhotoRecoverySection from '../components/PhotoRecoverySection';
+import { syncPhotos } from '../lib/photoSync';
 
 // TOC items mirror the order of <section> tags below. Each section
 // has an id matching one of these entries so the picker scrolls to
@@ -83,7 +84,7 @@ export default function SettingsPage() {
   const [setupMsg, setSetupMsg] = useState<string | null>(null);
   const [settingUp, setSettingUp] = useState(false);
   const [connectedFolder, setConnectedFolder] = useState<string | undefined>();
-  const [busy, setBusy] = useState<'push' | 'pull' | null>(null);
+  const [busy, setBusy] = useState<'push' | 'pull' | 'photos' | null>(null);
   const folderApi = isFolderApiSupported();
 
   useEffect(() => {
@@ -193,6 +194,24 @@ export default function SettingsPage() {
       );
     } catch (e) {
       setSyncMsg(`Send failed: ${(e as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function syncPhotosNow() {
+    setSyncMsg(null);
+    setBusy('photos');
+    try {
+      const r = await syncPhotos(projects, settings.photosSubfolder || 'photos');
+      setSyncMsg(
+        `Photo sync done: ${r.uploaded} uploaded, ${r.downloaded} downloaded` +
+          (r.missing ? `, ${r.missing} not found on either side` : '') +
+          (r.errors ? `, ${r.errors} error(s)` : '') +
+          '.',
+      );
+    } catch (e) {
+      setSyncMsg(`Photo sync failed: ${(e as Error).message}`);
     } finally {
       setBusy(null);
     }
@@ -594,10 +613,11 @@ export default function SettingsPage() {
             replicates it to your other devices, where you can pull the
             latest with one tap. Use the buttons below to send your
             current state to OneDrive (so other devices can load it) or
-            get the latest state another device sent. <strong>Photos
-            stay on the device that took them</strong> — they're too big
-            to ship through this channel; only the captions / filenames
-            travel.
+            get the latest state another device sent. <strong>Photos now
+            sync too</strong> — use <em>🖼️ Sync photos ↕</em> below to push
+            this device's photos to the OneDrive <code>photos</code>
+            subfolder and pull down any that other devices added (desktop
+            only; on mobile, use a workboard's <em>Send to desktop</em>).
           </p>
         </div>
 
@@ -685,6 +705,14 @@ export default function SettingsPage() {
                 {busy === 'pull'
                   ? 'Loading…'
                   : '↓ Get: Other devices → this device'}
+              </button>
+              <button
+                className="btn-secondary text-sm"
+                onClick={syncPhotosNow}
+                disabled={busy !== null}
+                title="Upload this device's photos to the OneDrive photos subfolder and download any photos other devices put there. Matched to their workboards automatically."
+              >
+                {busy === 'photos' ? 'Syncing photos…' : '🖼️ Sync photos ↕'}
               </button>
             </>
           )}
