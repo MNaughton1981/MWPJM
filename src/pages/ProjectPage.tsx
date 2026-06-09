@@ -15,11 +15,14 @@ import UpdateComposer from '../components/UpdateComposer';
 import VendorsSection from '../components/VendorsSection';
 import PageTOC, { type PageTOCItem } from '../components/PageTOC';
 import {
+  downloadJson,
   downloadText,
   projectToHtml,
   projectToMarkdown,
   projectToOneOnOneSummary,
 } from '../lib/exporters';
+import { buildBoardPayload } from '../lib/sync';
+import { loadProjectPhotoFiles } from '../lib/photoStorage';
 import { copyRichText } from '../lib/destinations';
 
 export default function ProjectPage() {
@@ -31,6 +34,7 @@ export default function ProjectPage() {
   const archiveProject = useStore((s) => s.archiveProject);
   const unarchiveProject = useStore((s) => s.unarchiveProject);
   const woUrlPattern = useStore((s) => s.settings.nuvoloWorkOrderUrlPattern);
+  const settings = useStore((s) => s.settings);
   const importedWorkOrders = useStore((s) => s.workOrders);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
 
@@ -132,6 +136,72 @@ export default function ProjectPage() {
     } catch {
       setCopyStatus('Copy failed — clipboard not available.');
     }
+  }
+
+  // "Send to desktop": package THIS workboard as a mergeable JSON file
+  // plus its photo image files, and hand them off — via the native
+  // share sheet on mobile (→ save into the OneDrive app), or a plain
+  // download on desktop. On the desktop the JSON is brought in through
+  // Settings → Sync → "Load from file", which now MERGES (so it adds
+  // this board without disturbing the others). This is the supported
+  // phone→desktop path that the old one-directional sync never had.
+  async function sendToDesktop() {
+    const payload = buildBoardPayload(project!, settings);
+    const safe =
+      project!.name.replace(/[^a-z0-9-_]+/gi, '-').toLowerCase().slice(0, 40) ||
+      'workboard';
+    const jsonName = `${safe}.mwpjm.json`;
+    const jsonFile = new File([JSON.stringify(payload, null, 2)], jsonName, {
+      type: 'application/json',
+    });
+    const photoFiles = await loadProjectPhotoFiles(project!.id, project!.photos);
+    const files = [jsonFile, ...photoFiles];
+
+    // Native share (mobile): lets the user drop everything straight into
+    // the OneDrive app. Guarded with canShare({files}) since file-share
+    // support varies by platform.
+    const nav = navigator as Navigator & {
+      canShare?: (data: { files?: File[] }) => boolean;
+      share?: (data: { files?: File[]; title?: string; text?: string }) => Promise<void>;
+    };
+    if (nav.share && nav.canShare && nav.canShare({ files })) {
+      try {
+        await nav.share({
+          files,
+          title: project!.name,
+          text: `Workboard "${project!.name}" + ${photoFiles.length} photo(s)`,
+        });
+        setCopyStatus(
+          'Shared — save into OneDrive, then merge-import on your desktop.',
+        );
+        return;
+      } catch (e) {
+        if ((e as Error).name === 'AbortError') {
+          setCopyStatus('Share cancelled.');
+          return;
+        }
+        // Otherwise fall through to the download fallback below.
+      }
+    }
+
+    // Fallback (desktop / no file-share): download the JSON, then each
+    // photo, with a small gap so the browser doesn't drop downloads.
+    downloadJson(jsonName, payload);
+    for (const f of photoFiles) {
+      const url = URL.createObjectURL(f);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = f.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    setCopyStatus(
+      `Downloaded board + ${photoFiles.length} photo(s). Put them in OneDrive, ` +
+        `then Settings → Sync → Load from file on your desktop to merge it in.`,
+    );
   }
 
   function confirmDelete() {
@@ -377,6 +447,13 @@ export default function ProjectPage() {
             title="Copy a formatted snapshot to your clipboard. Paste into OneNote, Word, Outlook, Gmail, Teams, or any rich-text surface — headings and tables stay intact."
           >
             📋 Export Summary
+          </button>
+          <button
+            className="btn-secondary text-xs"
+            onClick={sendToDesktop}
+            title="Package this workboard + its photos and share to OneDrive (mobile) or download (desktop). On the desktop, Settings → Sync → Load from file merges it in without disturbing your other workboards."
+          >
+            📤 Send to desktop
           </button>
           <button
             className="btn-ghost text-xs"

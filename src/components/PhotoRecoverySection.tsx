@@ -39,6 +39,7 @@ function extOf(blob: Blob): string {
 export default function PhotoRecoverySection() {
   const projects = useStore((s) => s.projects);
   const addProject = useStore((s) => s.addProject);
+  const composerDrafts = useStore((s) => s.composerDrafts);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -149,16 +150,22 @@ export default function PhotoRecoverySection() {
   const matched = groups.filter((g) => activeIds.has(g.projectId));
   const totalPhotos = groups.reduce((n, g) => n + g.photos.length, 0);
 
+  // Unsent update-box text whose workboard no longer exists. Survives a
+  // wholesale import because applySyncedState/merge never clear drafts.
+  const orphanedDrafts = Object.entries(composerDrafts).filter(
+    ([pid, text]) => text.trim().length > 0 && !activeIds.has(pid),
+  );
+
   return (
     <section id="sec-recovery" className="card p-4 space-y-3 scroll-mt-20">
-      <h2 className="font-semibold">🛟 Recover photos from this device</h2>
+      <h2 className="font-semibold">🛟 Recover photos &amp; notes from this device</h2>
       <p className="text-sm text-slate-600">
-        Photos are stored on this device separately from workboard text. If a
-        workboard's text was overwritten (for example by importing a sync
-        file), its photos usually survive here as &ldquo;orphaned&rdquo;
-        images. This tool reads them straight from this device's storage so you
-        can download them or rebuild a workboard around them. It only reads —
-        nothing is deleted.
+        Photos and unsent update-box text are stored on this device
+        separately from workboard records. If a workboard was overwritten
+        (for example by importing a sync file), its photos and any draft
+        notes usually survive here as &ldquo;orphaned&rdquo; data. This tool
+        reads them straight from this device's storage so you can recover
+        them. It only reads — nothing is deleted.
       </p>
 
       {loading && (
@@ -223,6 +230,64 @@ export default function PhotoRecoverySection() {
                   </button>
                 ))}
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {orphanedDrafts.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h3 className="text-sm font-semibold text-slate-800">
+              Leftover notes from lost workboards
+            </h3>
+            <button
+              className="btn-primary text-xs"
+              onClick={() => {
+                const all = orphanedDrafts
+                  .map(
+                    ([pid, text], i) =>
+                      `--- Note ${i + 1} (id: ${pid}) ---\n${text}`,
+                  )
+                  .join('\n\n');
+                if (navigator.clipboard) {
+                  void navigator.clipboard.writeText(all);
+                  setMsg(
+                    `Copied all ${orphanedDrafts.length} leftover note(s) to the clipboard.`,
+                  );
+                }
+              }}
+            >
+              ⧉ Copy all notes
+            </button>
+          </div>
+          <p className="text-xs text-slate-500">
+            Unsent text from a workboard's update box that outlived the
+            workboard itself. Copy anything you need.
+          </p>
+          {orphanedDrafts.map(([pid, text]) => (
+            <div key={pid} className="border rounded-lg p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-slate-500 font-mono">
+                  id: {pid}
+                </span>
+                <button
+                  className="btn-secondary text-xs"
+                  onClick={() => {
+                    if (navigator.clipboard) {
+                      void navigator.clipboard.writeText(text);
+                      setMsg('Note text copied to clipboard.');
+                    }
+                  }}
+                >
+                  ⧉ Copy text
+                </button>
+              </div>
+              <textarea
+                readOnly
+                value={text}
+                className="w-full h-32 text-sm border rounded p-2 font-mono"
+              />
             </div>
           ))}
         </div>

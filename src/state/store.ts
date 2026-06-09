@@ -241,6 +241,30 @@ interface AppState {
     savedVendorEvents?: SavedVendorEvent[];
     syncedAt: string;
   }) => void;
+
+  /**
+   * Safe alternative to `applySyncedState`: MERGE a pulled payload into
+   * local state instead of replacing it. Projects are unioned by id —
+   * an incoming project not present locally is added; one that exists
+   * is overwritten only when its `updatedAt` is newer. Local-only
+   * projects are ALWAYS preserved, so a pull can never clobber work
+   * created on this device but not yet in the file (the data-loss trap
+   * from importing a desktop snapshot onto a phone). Saved vendors
+   * union by id (incoming wins); saved events union by id (newer
+   * `updatedAt` wins); workOrders takes whichever import is newer.
+   *
+   * Settings are intentionally NOT touched — they're device-specific
+   * (e.g. the desktop's Windows `reportFolderPath`), so merging must
+   * never overwrite them. `lastSyncedAt` is stamped with the source's
+   * timestamp so freshness/direction logic keeps working.
+   */
+  mergeSyncedState: (data: {
+    projects: Project[];
+    workOrders: ImportedWorkOrders | null;
+    savedVendors?: SavedVendor[];
+    savedVendorEvents?: SavedVendorEvent[];
+    syncedAt: string;
+  }) => void;
 }
 
 const defaultSettings: Settings = {
@@ -659,6 +683,62 @@ export const useStore = create<AppState>()(
           lastSyncedAt: data.syncedAt,
           syncError: null,
         })),
+
+      mergeSyncedState: (data) =>
+        set((s) => {
+          // Projects: union by id. Replace a local project only when the
+          // incoming copy is strictly newer; otherwise keep local. Then
+          // prepend any incoming projects we don't have locally. Local-
+          // only projects are never dropped.
+          const localIds = new Set(s.projects.map((p) => p.id));
+          const merged = s.projects.map((p) => {
+            const inc = data.projects.find((q) => q.id === p.id);
+            if (
+              inc &&
+              new Date(inc.updatedAt).getTime() >
+                new Date(p.updatedAt).getTime()
+            ) {
+              return inc;
+            }
+            return p;
+          });
+          const incomingOnly = data.projects.filter(
+            (q) => !localIds.has(q.id),
+          );
+
+          // Saved vendors: union by id (incoming wins on conflict).
+          const vendorById = new Map(s.savedVendors.map((v) => [v.id, v]));
+          for (const v of data.savedVendors ?? []) vendorById.set(v.id, v);
+
+          // Saved events: union by id, newer updatedAt wins.
+          const eventById = new Map(
+            s.savedVendorEvents.map((e) => [e.id, e]),
+          );
+          for (const e of data.savedVendorEvents ?? []) {
+            const cur = eventById.get(e.id);
+            if (!cur || e.updatedAt > cur.updatedAt) eventById.set(e.id, e);
+          }
+
+          // Work orders: take whichever import snapshot is newer.
+          let workOrders = s.workOrders;
+          if (data.workOrders) {
+            const incMs = new Date(data.workOrders.importedAt).getTime();
+            const curMs = s.workOrders
+              ? new Date(s.workOrders.importedAt).getTime()
+              : 0;
+            if (incMs >= curMs) workOrders = data.workOrders;
+          }
+
+          return {
+            // Newly-arrived boards first so they're easy to spot.
+            projects: [...incomingOnly, ...merged],
+            savedVendors: Array.from(vendorById.values()),
+            savedVendorEvents: Array.from(eventById.values()),
+            workOrders,
+            lastSyncedAt: data.syncedAt,
+            syncError: null,
+          };
+        }),
     }),
     {
       name: 'mwpjm-store-v1',
