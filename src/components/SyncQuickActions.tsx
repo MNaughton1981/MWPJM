@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  applySyncedState,
+  applyMergedState,
   DEFAULT_SYNC_FILENAME,
   pullFromFile,
   refreshFromFolder,
@@ -109,7 +109,7 @@ export default function SyncQuickActions() {
       .then((status) => {
         if (status.kind === 'applied') {
           setMsg(
-            `Loaded ${status.projectsCount} project(s) from another device.`,
+            `Merged from another device: ${status.added} new, ${status.updated} updated.`,
           );
         }
         // 'already-current', 'no-file', 'no-folder', 'pushed' — silent.
@@ -148,14 +148,15 @@ export default function SyncQuickActions() {
     setMsg(`Reading "${file.name}"…`);
     try {
       const payload = await pullFromFile(file);
-      // The user explicitly picked this file — they want it applied.
-      // Skip the "are you sure?" prompt the older flow used, which
-      // most people blew through without reading anyway. The lib
-      // function is non-destructive in the sense that it preserves
-      // photos in IndexedDB, so the worst case is "I picked the wrong
-      // file and now my list looks weird"; recoverable by re-syncing.
-      applySyncedState(payload);
-      setMsg(`✓ Loaded ${payload.projects.length} project(s) from ${file.name}.`);
+      // MERGE rather than replace: the file is folded into the local
+      // list, keeping any boards that only exist on this device. This
+      // is what makes importing a desktop snapshot onto the phone safe
+      // — it can't wipe a board you just created here.
+      const summary = applyMergedState(payload);
+      setMsg(
+        `✓ Merged from ${file.name}: ${summary.added} new, ` +
+          `${summary.updated} updated, ${summary.keptLocalOnly} kept.`,
+      );
     } catch (e) {
       setMsg(`Load failed: ${(e as Error).message}`);
     } finally {
@@ -224,7 +225,7 @@ function formatStatus(status: RefreshStatus): string {
     case 'already-current':
       return 'Already up to date.';
     case 'applied':
-      return `Loaded ${status.projectsCount} project(s) from another device.`;
+      return `Merged from another device: ${status.added} new, ${status.updated} updated.`;
     case 'pushed':
       return `Sent ${status.projectsCount} project(s) to the folder.`;
     case 'error':

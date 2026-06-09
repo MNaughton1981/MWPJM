@@ -171,6 +171,76 @@ export function applySyncedState(payload: SyncPayload): void {
   });
 }
 
+/** Summary of what a merge changed, for surfacing in the UI. */
+export interface MergeSummary {
+  /** Incoming boards that didn't exist locally and were added. */
+  added: number;
+  /** Existing boards replaced because the incoming copy was newer. */
+  updated: number;
+  /** Local boards not in the incoming file — preserved untouched. */
+  keptLocalOnly: number;
+}
+
+/**
+ * Merge a pulled payload into local state instead of replacing it
+ * (see store `mergeSyncedState`). This is the safe default for any
+ * cross-device pull/import: it unions by board id, takes the newer
+ * copy on conflict, and never drops a board that only exists on this
+ * device. Returns a summary so callers can tell the user exactly what
+ * happened ("3 new, 1 updated, 8 kept").
+ */
+export function applyMergedState(payload: SyncPayload): MergeSummary {
+  const local = useStore.getState().projects;
+  const localById = new Map(local.map((p) => [p.id, p]));
+  let added = 0;
+  let updated = 0;
+  for (const inc of payload.projects) {
+    const cur = localById.get(inc.id);
+    if (!cur) {
+      added++;
+    } else if (
+      new Date(inc.updatedAt).getTime() > new Date(cur.updatedAt).getTime()
+    ) {
+      updated++;
+    }
+  }
+  const incomingIds = new Set(payload.projects.map((p) => p.id));
+  const keptLocalOnly = local.filter((p) => !incomingIds.has(p.id)).length;
+
+  useStore.getState().mergeSyncedState({
+    projects: payload.projects,
+    workOrders: payload.workOrders,
+    savedVendors: payload.savedVendors ?? [],
+    savedVendorEvents: payload.savedVendorEvents ?? [],
+    syncedAt: payload.syncedAt,
+  });
+
+  return { added, updated, keptLocalOnly };
+}
+
+/**
+ * Build a sync payload containing a SINGLE workboard, for the mobile
+ * "Send to desktop" flow. The file is shaped exactly like the normal
+ * sync file (so the desktop can merge-import it through the same path),
+ * but carries just this one board. `settings` is included only to
+ * satisfy the parser — merge-import ignores incoming settings, so the
+ * desktop's own settings are never disturbed.
+ */
+export function buildBoardPayload(
+  project: Project,
+  settings: Settings,
+): SyncPayload {
+  return {
+    version: 1,
+    syncedAt: new Date().toISOString(),
+    projects: [project],
+    settings,
+    workOrders: null,
+    savedVendors: [],
+    savedVendorEvents: [],
+  };
+}
+
 // ---------- Auto-sync subscription ----------
 //
 // Subscribes to the store and writes the file every time projects,
@@ -282,8 +352,14 @@ export type RefreshStatus =
   | { kind: 'no-file' }
   /** Already at parity with the file. Nothing changed. */
   | { kind: 'already-current' }
-  /** File was newer than us — applied. */
-  | { kind: 'applied'; projectsCount: number; syncedAt: string }
+  /** File was newer than us — merged in (union by id, newer wins). */
+  | {
+      kind: 'applied';
+      projectsCount: number;
+      added: number;
+      updated: number;
+      syncedAt: string;
+    }
   /** We were newer (and had local changes) — pushed. */
   | { kind: 'pushed'; projectsCount: number; syncedAt: string }
   /** Refresh hit an error. */
@@ -339,12 +415,14 @@ export async function refreshFromFolder(
 
   const fileSyncedMs = new Date(payload.syncedAt).getTime();
 
-  // File is newer than us — apply.
+  // File is newer than us — merge it in (never clobbers local-only boards).
   if (fileSyncedMs > localSyncedMs) {
-    applySyncedState(payload);
+    const summary = applyMergedState(payload);
     return {
       kind: 'applied',
       projectsCount: payload.projects.length,
+      added: summary.added,
+      updated: summary.updated,
       syncedAt: payload.syncedAt,
     };
   }

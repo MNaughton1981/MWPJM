@@ -13,7 +13,7 @@ import {
   isFolderApiSupported,
 } from '../lib/folderConnection';
 import {
-  applySyncedState,
+  applyMergedState,
   DEFAULT_SYNC_FILENAME,
   pullFromFile,
   pullFromFolder,
@@ -234,21 +234,23 @@ export default function SettingsPage() {
 
   function applyAfterConfirm(payload: SyncPayload, source: string) {
     const ok = window.confirm(
-      `Replace local state with the version from ${source}?\n\n` +
+      `Merge the version from ${source} into your workboards?\n\n` +
         `Synced: ${formatDateTime(payload.syncedAt)}\n` +
-        `Projects: ${payload.projects.length}\n` +
+        `Incoming projects: ${payload.projects.length}\n` +
         (payload.workOrders
           ? `Work orders: ${payload.workOrders.rows.length} (${payload.workOrders.sourceFilename})\n`
           : 'Work orders: none\n') +
-        `\nAny edits made on this device since the last sync will be lost.`,
+        `\nYour existing workboards are kept. Where a workboard exists on ` +
+        `both, the newer copy wins. Nothing on this device is deleted.`,
     );
     if (!ok) {
       setSyncMsg('Load cancelled — local state unchanged.');
       return;
     }
-    applySyncedState(payload);
+    const summary = applyMergedState(payload);
     setSyncMsg(
-      `Loaded ${payload.projects.length} project(s) from ${source}.`,
+      `Merged from ${source}: ${summary.added} new, ` +
+        `${summary.updated} updated, ${summary.keptLocalOnly} kept.`,
     );
   }
 
