@@ -8,6 +8,7 @@ import {
   type SecurityNotificationArgs,
 } from '../lib/security';
 import { isValidWorkOrderId } from '../lib/nuvolo';
+import VisitTimeSelect from './VisitTimeSelect';
 
 interface Props {
   project: Project;
@@ -467,7 +468,7 @@ function VendorCard({
         </button>
         <input
           className="input font-medium flex-1"
-          placeholder="Vendor name (e.g. Joe Warren)"
+          placeholder="Vendor Name (e.g. John Q. Sample)"
           value={vendor.name}
           onChange={(e) => onChange({ name: e.target.value })}
         />
@@ -542,15 +543,10 @@ function VendorCard({
         </div>
         <div>
           <label className="label">Visit time</label>
-          <input
-            type="text"
-            className="input"
-            placeholder="7:00 AM, or 8:00 AM – 10:00 AM"
+          <VisitTimeSelect
             value={vendor.visitTime ?? ''}
-            onChange={(e) =>
-              onChange({ visitTime: e.target.value || undefined })
-            }
-            title="Free-form — type a fixed time or a window. Goes verbatim into the security notification email."
+            onChange={(v) => onChange({ visitTime: v || undefined })}
+            title="Pick the on-site time. Goes into the security notification email."
           />
         </div>
       </div>

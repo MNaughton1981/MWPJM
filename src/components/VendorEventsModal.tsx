@@ -3,6 +3,7 @@ import type { SavedVendorEvent, Vendor } from '../types';
 import { useStore } from '../state/store';
 import { buildSecurityNotification } from '../lib/security';
 import { formatDate } from '../lib/format';
+import VisitTimeSelect from './VisitTimeSelect';
 
 /**
  * Vendor Events modal — opened from the Workboards page "📅 Vendor
@@ -435,13 +436,10 @@ function FireMode({
           </div>
           <div>
             <label className="label">Visit time</label>
-            <input
-              type="text"
-              className="input"
-              placeholder="7:00 AM, or 8:00 AM – 10:00 AM"
+            <VisitTimeSelect
               value={visitTime}
-              onChange={(e) => setVisitTime(e.target.value)}
-              title="Free-form — type a fixed time or a window. Goes verbatim into the email."
+              onChange={setVisitTime}
+              title="Pick the on-site time. Goes into the security notification email."
             />
           </div>
         </div>
