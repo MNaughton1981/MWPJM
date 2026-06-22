@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 /**
  * Reminder-style time picker for vendor visit times.
  *
@@ -7,15 +9,17 @@
  * select surfaces as a scrollable wheel; on desktop it's a standard
  * dropdown.
  *
+ * The dropdown also offers a **"Custom…"** escape hatch: choosing it
+ * swaps the select for a free-text field, so the user can still enter a
+ * time window ("8:00 AM – 10:00 AM") or any other non-standard value.
+ *
  * The selected value is stored as a display string (e.g. "7:00 AM"),
  * which is what the security-notification email expects — so this is a
  * drop-in replacement for the old free-form text input and keeps
- * backward compatibility with previously saved values.
- *
- * Any pre-existing value that isn't one of the generated options (for
- * example a legacy time window like "8:00 AM – 10:00 AM") is preserved:
- * it's injected as an extra selected option so editing a vendor never
- * silently drops what was already there.
+ * backward compatibility with previously saved values. Any pre-existing
+ * value that isn't one of the generated options is treated as a custom
+ * value and opens straight into the free-text field, so editing a vendor
+ * never silently drops what was already there.
  */
 
 /** Build 15-minute time options for a full 24-hour day, formatted as "h:mm AM/PM". */
@@ -33,6 +37,10 @@ function buildTimeOptions(): string[] {
 
 const TIME_OPTIONS = buildTimeOptions();
 
+// Sentinel value for the "Custom…" dropdown entry — distinct from any
+// real time string and from '' (No time set).
+const CUSTOM = '__custom__';
+
 interface VisitTimeSelectProps {
   /** Current value — a display string like "7:00 AM", or '' for none. */
   value: string;
@@ -48,24 +56,68 @@ export default function VisitTimeSelect({
   className = 'input',
   title,
 }: VisitTimeSelectProps) {
-  // Preserve a legacy / free-form value that isn't in the standard list
-  // (e.g. an imported time window) so it stays selectable and isn't lost.
-  const hasCustomValue = !!value && !TIME_OPTIONS.includes(value);
+  // A non-empty value that isn't one of the standard options is a custom
+  // value (e.g. an imported time window) — open the free-text field for it.
+  const valueIsCustom = !!value && !TIME_OPTIONS.includes(value);
+
+  // Track whether the user explicitly chose "Custom…" even before they've
+  // typed anything (at which point the value is still '').
+  const [customMode, setCustomMode] = useState(false);
+
+  const showCustom = customMode || valueIsCustom;
+
+  function handleSelect(e: React.ChangeEvent<HTMLSelectElement>) {
+    const next = e.target.value;
+    if (next === CUSTOM) {
+      setCustomMode(true);
+      return; // keep any current value as the starting point for editing
+    }
+    setCustomMode(false);
+    onChange(next);
+  }
+
+  if (showCustom) {
+    return (
+      <div className="flex gap-1">
+        <input
+          type="text"
+          className={`${className} flex-1`}
+          placeholder="e.g. 8:00 AM – 10:00 AM"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          title={title ?? 'Custom visit time — type a fixed time or a window.'}
+          autoFocus
+        />
+        <button
+          type="button"
+          className="btn-ghost px-2 text-sm shrink-0"
+          onClick={() => {
+            setCustomMode(false);
+            onChange('');
+          }}
+          title="Back to the time list"
+          aria-label="Back to the time list"
+        >
+          ↩
+        </button>
+      </div>
+    );
+  }
 
   return (
     <select
       className={className}
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={handleSelect}
       title={title}
     >
       <option value="">No time set</option>
-      {hasCustomValue && <option value={value}>{value}</option>}
       {TIME_OPTIONS.map((t) => (
         <option key={t} value={t}>
           {t}
         </option>
       ))}
+      <option value={CUSTOM}>Custom…</option>
     </select>
   );
 }
