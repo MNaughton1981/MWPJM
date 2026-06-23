@@ -229,7 +229,7 @@ function ListMode({
                 type="button"
                 onClick={() => onPick(ev.id)}
                 className="flex-1 text-left rounded p-2 -mx-2 hover:bg-slate-50 min-w-0"
-                title="Send a security notification using this event's saved vendor + service info"
+                title="Send a security notification using this event's saved visitor + service info"
               >
                 <div className="font-medium truncate flex items-center gap-2">
                   📅 {ev.name}
@@ -314,7 +314,7 @@ function FireMode({
     }
     if (!vendorReady) {
       window.alert(
-        'This event has no vendor name yet. Tap Edit and add at least the vendor name before firing.',
+        'This event has no visitor name yet. Tap Edit and add at least the visitor name before firing.',
       );
       return;
     }
@@ -483,7 +483,7 @@ function FireMode({
             !securityConfigured
               ? 'Set the security team email in Settings first.'
               : !vendorReady
-              ? 'Edit this event and add at least the vendor name first.'
+              ? 'Edit this event and add at least the visitor name first.'
               : 'Open mail with the structured visit notice — sends to the security team'
           }
         >
@@ -566,22 +566,22 @@ function EditMode({
       </div>
 
       <div className="border-t pt-3">
-        <h3 className="font-medium text-sm mb-2">Vendor</h3>
+        <h3 className="font-medium text-sm mb-2">Visitor</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div>
-            <label className="label">Vendor name</label>
+            <label className="label">Visitor name</label>
             <input
               className="input"
-              placeholder="Joe Warren"
+              placeholder="John Q. Sample"
               value={vendorName}
               onChange={(e) => setVendorName(e.target.value)}
             />
           </div>
           <div>
-            <label className="label">Company</label>
+            <label className="label">Vendor</label>
             <input
               className="input"
-              placeholder="Joe Warren & Sons"
+              placeholder="e.g. Acme Plumbing"
               value={vendorCompany}
               onChange={(e) => setVendorCompany(e.target.value)}
             />

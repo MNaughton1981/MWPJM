@@ -186,7 +186,7 @@ export function buildVendorTableHtml(
   };
   const allFields: FieldDef[] = [
     { label: 'Name', always: true, raw: (v) => v.name, html: (v) => `<b>${nameHtml(v)}</b>` },
-    { label: 'Company', raw: (v) => v.company ?? '', html: (v) => escHtml(v.company ?? '') },
+    { label: 'Vendor', raw: (v) => v.company ?? '', html: (v) => escHtml(v.company ?? '') },
     { label: 'Role / trade', raw: (v) => v.role ?? '', html: (v) => escHtml(v.role ?? '') },
     { label: 'Purpose', raw: (v) => v.purpose ?? '', html: (v) => escHtml(v.purpose ?? '') },
     { label: 'Phone', raw: (v) => v.phone ?? '', html: (v) => escHtml(v.phone ?? '') },
@@ -322,7 +322,7 @@ function renderVendorBlock(
     ? `${pad('Name')}: ${vendor.name} ★ (point of contact)`
     : `${pad('Name')}: ${vendor.name}`;
   lines.push(nameLine);
-  if (vendor.company) lines.push(`${pad('Company')}: ${vendor.company}`);
+  if (vendor.company) lines.push(`${pad('Vendor')}: ${vendor.company}`);
   if (vendor.role) lines.push(`${pad('Role')}: ${vendor.role}`);
   if (vendor.purpose) lines.push(`${pad('Purpose')}: ${vendor.purpose}`);
   if (vendor.phone) lines.push(`${pad('Phone')}: ${vendor.phone}`);
@@ -369,7 +369,7 @@ function renderVisitContextBlock(
   if (project.workOrderId)
     lines.push(`${pad('Work Order')}: ${project.workOrderId}`);
   if (typeof vendorCount === 'number')
-    lines.push(`${pad('Vendors')}: ${vendorCount}`);
+    lines.push(`${pad('Visitors')}: ${vendorCount}`);
   return lines;
 }
 
@@ -498,7 +498,7 @@ export function buildSecurityNotification(
   lines.push('');
   lines.push(
     ...renderVendorBlock(args.vendor, {
-      headingLabel: 'Vendor',
+      headingLabel: 'Visitor',
       markPrimary: !!args.vendor.isPrimaryContact,
       host: args.vendor.host?.trim() || args.technicianName,
     }),
@@ -608,7 +608,7 @@ export function buildMultiVendorSecurityNotification(
     lines.push(
       ...renderVendorBlock(v, {
         headingLabel:
-          orderedVendors.length === 1 ? 'Vendor' : `Vendor ${i + 1}`,
+          orderedVendors.length === 1 ? 'Visitor' : `Visitor ${i + 1}`,
         markPrimary: !!v.isPrimaryContact,
         host: v.host?.trim() || args.technicianName,
       }),

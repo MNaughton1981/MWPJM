@@ -183,12 +183,12 @@ export default function VendorsSection({ project }: Props) {
   function notifySecurity(vendor: Vendor, alsoPostToNuvolo: boolean) {
     if (!securityConfigured) return;
     if (!vendor.name.trim()) {
-      window.alert('Add the vendor name first.');
+      window.alert('Add the visitor name first.');
       return;
     }
 
-    // When there are 2+ named vendors, the common intent is one combined
-    // notice for the whole crew. If the "Group all vendors" box is checked
+    // When there are 2+ named visitors, the common intent is one combined
+    // notice for the whole crew. If the "Group all visitors" box is checked
     // we just do that. If it's unchecked we ASK — so grouping is never
     // silently skipped when it was probably what the user wanted.
     if (namedVendorCount >= 2) {
@@ -197,10 +197,10 @@ export default function VendorsSection({ project }: Props) {
         return;
       }
       const combine = window.confirm(
-        `There are ${namedVendorCount} vendors on this workboard.\n\n` +
+        `There are ${namedVendorCount} visitors on this workboard.\n\n` +
           `If they're coming for the same job, you can send ONE combined ` +
           `notification instead of separate emails.\n\n` +
-          `OK  →  send one combined notification for all ${namedVendorCount} vendors\n` +
+          `OK  →  send one combined notification for all ${namedVendorCount} visitors\n` +
           `Cancel  →  notify only ${vendor.name}`,
       );
       if (combine) {
@@ -249,7 +249,7 @@ export default function VendorsSection({ project }: Props) {
   async function notifySecurityAllVendors(alsoPostToNuvolo: boolean) {
     if (!securityConfigured) return;
     if (namedVendorCount === 0) {
-      window.alert('Add at least one vendor with a name first.');
+      window.alert('Add at least one visitor with a name first.');
       return;
     }
     const args: MultiVendorSecurityNotificationArgs = {
@@ -302,7 +302,7 @@ export default function VendorsSection({ project }: Props) {
     <section className="card p-4 space-y-3">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="font-semibold">
-          Vendors / contacts
+          Visitors
           {poc && poc.name.trim() && (
             <span className="ml-2 text-xs font-normal text-amber-700">
               ★ POC: {poc.name}
@@ -315,7 +315,7 @@ export default function VendorsSection({ project }: Props) {
               type="button"
               className="btn-ghost text-xs"
               onClick={() => setPickerOpen((v) => !v)}
-              title="Pick from your saved vendor book — pre-fills name, company, phone, email"
+              title="Pick from your saved visitor book — pre-fills name, vendor, phone, email"
             >
               📒 From book ▾
             </button>
@@ -323,9 +323,9 @@ export default function VendorsSection({ project }: Props) {
           <button
             className="btn-ghost text-xs"
             onClick={add}
-            title="Add a blank vendor card to fill in from scratch"
+            title="Add a blank visitor card to fill in from scratch"
           >
-            + Add vendor
+            + Add visitor
           </button>
           {pickerOpen && (
             <div
@@ -338,7 +338,7 @@ export default function VendorsSection({ project }: Props) {
             >
               <input
                 className="input text-sm"
-                placeholder="Filter by name or company…"
+                placeholder="Filter by name or vendor…"
                 value={pickerFilter}
                 onChange={(e) => setPickerFilter(e.target.value)}
                 autoFocus
@@ -346,7 +346,7 @@ export default function VendorsSection({ project }: Props) {
               <div className="mt-2 space-y-0.5">
                 {filteredSavedVendors.length === 0 ? (
                   <p className="text-xs text-slate-500 px-1.5 py-1">
-                    No saved vendors match.
+                    No saved visitors match.
                   </p>
                 ) : (
                   filteredSavedVendors.map((sv) => (
@@ -401,7 +401,7 @@ export default function VendorsSection({ project }: Props) {
 
       {vendors.length === 0 ? (
         <p className="text-sm text-slate-500">
-          No vendors yet. Add a vendor to capture their contact info and
+          No visitors yet. Add a visitor to capture their contact info and
           notify security when they're coming on site.
         </p>
       ) : (
@@ -475,7 +475,7 @@ export default function VendorsSection({ project }: Props) {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <label
               className="flex items-center gap-2 text-xs text-slate-700"
-              title="On (recommended for same-day visits): tapping any vendor's Notify Security sends ONE combined email covering everyone. Off: individual emails — but you'll be asked whether to combine."
+              title="On (recommended for same-day visits): tapping any visitor's Notify Security sends ONE combined email covering everyone. Off: individual emails — but you'll be asked whether to combine."
             >
               <input
                 type="checkbox"
@@ -483,11 +483,11 @@ export default function VendorsSection({ project }: Props) {
                 onChange={(e) => setGroupVendors(e.target.checked)}
                 className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
               />
-              Group all vendors into one notification
+              Group all visitors into one notification
             </label>
             <label
               className="flex items-center gap-2 text-xs text-slate-700"
-              title="Notify Security copies a shaded vendor table to your clipboard by default (paste it into the email with Ctrl+V). Tick this to skip the table and send only the plain-text version — the fallback if your browser can't paste the table."
+              title="Notify Security copies a shaded visitor table to your clipboard by default (paste it into the email with Ctrl+V). Tick this to skip the table and send only the plain-text version — the fallback if your browser can't paste the table."
             >
               <input
                 type="checkbox"
@@ -518,11 +518,11 @@ export default function VendorsSection({ project }: Props) {
               }
               title={
                 plainTextOnly
-                  ? `Open mail with one combined plain-text notice for all ${namedVendorCount} vendors`
-                  : `Copies the shaded vendor table, then opens mail for all ${namedVendorCount} vendors — paste the table in with Ctrl+V`
+                  ? `Open mail with one combined plain-text notice for all ${namedVendorCount} visitors`
+                  : `Copies the shaded visitor table, then opens mail for all ${namedVendorCount} visitors — paste the table in with Ctrl+V`
               }
             >
-              🛡️ Notify security (all {namedVendorCount} vendors) →
+              🛡️ Notify security (all {namedVendorCount} visitors) →
             </button>
           </div>
           {copyMsg && (
@@ -691,8 +691,8 @@ function VendorCard({
           }`}
           title={
             isPoc
-              ? 'This vendor is the workboard point of contact. Tap to clear.'
-              : 'Mark this vendor as the workboard point of contact (CC\'d on every security notification when they have email set)'
+              ? 'This visitor is the workboard point of contact. Tap to clear.'
+              : 'Mark this visitor as the workboard point of contact (CC\'d on every security notification when they have email set)'
           }
           aria-label={isPoc ? 'Unset point of contact' : 'Set as point of contact'}
           aria-pressed={isPoc}
@@ -701,15 +701,15 @@ function VendorCard({
         </button>
         <input
           className="input font-medium flex-1"
-          placeholder="Vendor Name (e.g. John Q. Sample)"
+          placeholder="Visitor name (e.g. John Q. Sample)"
           value={vendor.name}
           onChange={(e) => onChange({ name: e.target.value })}
         />
         <button
           className="text-slate-400 hover:text-rose-600 px-1 text-lg"
           onClick={onRemove}
-          aria-label="Remove vendor"
-          title="Remove vendor"
+          aria-label="Remove visitor"
+          title="Remove visitor"
         >
           ×
         </button>
@@ -717,7 +717,7 @@ function VendorCard({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         <div>
-          <label className="label">Company</label>
+          <label className="label">Vendor</label>
           <input
             className="input"
             placeholder="e.g. Acme Plumbing"
@@ -749,7 +749,7 @@ function VendorCard({
             {isPoc && (
               <span
                 className="ml-1.5 text-[10px] font-normal text-amber-700"
-                title="This vendor is the POC — when set, this email is CC'd on every security notification from this workboard."
+                title="This visitor is the POC — when set, this email is CC'd on every security notification from this workboard."
               >
                 CC'd on security emails
               </span>
@@ -788,7 +788,7 @@ function VendorCard({
                   : { host: name },
               );
             }}
-            title="Who the vendor is here to see. Security preps the visitor badge under this person and notifies them when the vendor signs in. Leave blank to use your own name; name a co-worker when they’re the point person that day (e.g. you’re on vacation). Pick a saved host from the dropdown to pull their email in."
+            title="Who the visitor is here to see. Security preps the visitor badge under this person and notifies them when the visitor signs in. Leave blank to use your own name; name a co-worker when they’re the point person that day (e.g. you’re on vacation). Pick a saved host from the dropdown to pull their email in."
           />
           {savedHosts.length > 0 && (
             <datalist id={`hosts-${vendor.id}`}>
@@ -822,7 +822,7 @@ function VendorCard({
                 ? 'Type a host name first.'
                 : hostInBook
                 ? 'This host is in your host book. Uncheck to remove them.'
-                : 'Save this host (name + email) to your host book so you can pick them from the dropdown on future vendors.'
+                : 'Save this host (name + email) to your host book so you can pick them from the dropdown on future visitors.'
             }
           >
             <input
@@ -849,7 +849,7 @@ function VendorCard({
           placeholder="e.g. Quarterly PM, Leak repair, Install"
           value={vendor.purpose ?? ''}
           onChange={(e) => onChange({ purpose: e.target.value })}
-          title="Why the vendor is on-site this time. Pick a saved purpose from the dropdown or type a new one."
+          title="Why the visitor is on-site this time. Pick a saved purpose from the dropdown or type a new one."
         />
         {savedPurposes.length > 0 && (
           <datalist id={`purposes-${vendor.id}`}>
@@ -1001,10 +1001,10 @@ function VendorCard({
           disabled={!vendor.name.trim()}
           title={
             !vendor.name.trim()
-              ? 'Enter the vendor name first.'
+              ? 'Enter the visitor name first.'
               : isInBook
-              ? 'This vendor is in your book. Tap to update with the current field values.'
-              : 'Save this vendor’s contact info (name, company, role, phone, email) to your vendor book for one-tap reuse. Notes are not saved — they’re per-visit. Save recurring reasons for being on-site with the “Save purpose to book” checkbox instead.'
+              ? 'This visitor is in your book. Tap to update with the current field values.'
+              : 'Save this visitor’s contact info (name, vendor, role, phone, email) to your visitor book for one-tap reuse. Notes are not saved — they’re per-visit. Save recurring reasons for being on-site with the “Save purpose to book” checkbox instead.'
           }
         >
           {isInBook ? '✓ In book' : '💾 Save to book'}
@@ -1017,7 +1017,7 @@ function VendorCard({
             !securityConfigured
               ? 'Set the security team email in Settings first.'
               : !vendor.name.trim()
-              ? 'Add the vendor name first.'
+              ? 'Add the visitor name first.'
               : alsoNuvolo && hasValidWorkOrder
               ? `Open mail to security + Nuvolo (${workOrderId}) with visit details`
               : 'Open mail with a structured visit notice for the security team'

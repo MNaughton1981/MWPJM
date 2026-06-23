@@ -83,7 +83,7 @@ export default function ProjectPage() {
     const items: PageTOCItem[] = [
       { id: 'sec-header', label: 'Workboard header', icon: '📋' },
       { id: 'sec-compose', label: 'Compose Note', icon: '✍️' },
-      { id: 'sec-vendors', label: 'Vendors / contacts', icon: '👥' },
+      { id: 'sec-vendors', label: 'Visitors', icon: '👥' },
     ];
     if (!isSimple) {
       items.push({ id: 'sec-trades', label: 'Trade Coordination', icon: '🔧' });
@@ -468,7 +468,7 @@ export default function ProjectPage() {
             <button
               className="btn-ghost text-xs"
               onClick={handleArchive}
-              title="Hide from active list. Photos, activity, vendors, and FWKD linkage are preserved — restore anytime via 'View archived' on the Workboards list."
+              title="Hide from active list. Photos, activity, visitors, and FWKD linkage are preserved — restore anytime via 'View archived' on the Workboards list."
             >
               📦 Archive
             </button>
