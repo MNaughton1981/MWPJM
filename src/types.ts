@@ -205,6 +205,19 @@ export interface SavedVendor {
 }
 
 /**
+ * A saved on-site host — typically a co-worker on the facilities team
+ * the user names as the visit host on a vendor. Stored in a global
+ * "host book" so their name + email can be pulled into future vendor
+ * entries via a dropdown instead of being re-typed. Dedupe key when
+ * saving is the lowercased, trimmed name.
+ */
+export interface SavedHost {
+  id: string;
+  name: string;
+  email?: string;
+}
+
+/**
  * A recurring vendor service / event template — quarterly drain
  * service, annual fire alarm test, monthly elevator inspection, etc.
  * Stored at the app level (not per-workboard) so the user can
@@ -440,6 +453,11 @@ export interface AppData {
    * missing.
    */
   savedVendorEvents?: SavedVendorEvent[];
+  /**
+   * Optional in the AppData JSON — older backups predate the host book.
+   * Importers should default to `[]` when missing.
+   */
+  savedHosts?: SavedHost[];
 }
 
 export const TRADE_LABELS: Record<TradeKey, string> = {

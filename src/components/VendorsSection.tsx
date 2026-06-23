@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { Project, SavedVendor, Vendor, VendorVisit } from '../types';
+import type { Project, SavedVendor, SavedHost, Vendor, VendorVisit } from '../types';
 import { useStore } from '../state/store';
 import {
   buildMultiVendorSecurityNotification,
@@ -54,6 +54,9 @@ export default function VendorsSection({ project }: Props) {
   const addOrUpdateSavedVendor = useStore((s) => s.addOrUpdateSavedVendor);
   const addSavedVendorPurpose = useStore((s) => s.addSavedVendorPurpose);
   const removeSavedVendorPurpose = useStore((s) => s.removeSavedVendorPurpose);
+  const savedHosts = useStore((s) => s.savedHosts);
+  const addOrUpdateSavedHost = useStore((s) => s.addOrUpdateSavedHost);
+  const removeSavedHost = useStore((s) => s.removeSavedHost);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerFilter, setPickerFilter] = useState('');
   /**
@@ -444,6 +447,17 @@ export default function VendorsSection({ project }: Props) {
               onRemovePurpose={(purpose) =>
                 removeSavedVendorPurpose(v.name, v.company, purpose)
               }
+              savedHosts={savedHosts}
+              onSaveHost={(name, email) =>
+                addOrUpdateSavedHost({ name, email })
+              }
+              onRemoveHost={(name) => {
+                const match = savedHosts.find(
+                  (h) =>
+                    h.name.trim().toLowerCase() === name.trim().toLowerCase(),
+                );
+                if (match) removeSavedHost(match.id);
+              }}
               securityConfigured={securityConfigured}
               hasValidWorkOrder={woValid}
               workOrderId={project.workOrderId}
@@ -574,6 +588,9 @@ function VendorCard({
   savedPurposes,
   onSavePurpose,
   onRemovePurpose,
+  savedHosts,
+  onSaveHost,
+  onRemoveHost,
   securityConfigured,
   hasValidWorkOrder,
   workOrderId,
@@ -589,6 +606,9 @@ function VendorCard({
   savedPurposes: string[];
   onSavePurpose: (purpose: string) => void;
   onRemovePurpose: (purpose: string) => void;
+  savedHosts: SavedHost[];
+  onSaveHost: (name: string, email?: string) => void;
+  onRemoveHost: (name: string) => void;
   securityConfigured: boolean;
   hasValidWorkOrder: boolean;
   workOrderId?: string;
@@ -646,6 +666,14 @@ function VendorCard({
     canSavePurpose &&
     savedPurposes.some(
       (p) => p.trim().toLowerCase() === purposeVal.toLowerCase(),
+    );
+
+  // ── Host book ────────────────────────────────────────────────────
+  const hostVal = (vendor.host ?? '').trim();
+  const hostInBook =
+    !!hostVal &&
+    savedHosts.some(
+      (h) => h.name.trim().toLowerCase() === hostVal.toLowerCase(),
     );
 
   return (
@@ -743,15 +771,36 @@ function VendorCard({
           <label className="label">Host</label>
           <input
             className="input"
+            list={`hosts-${vendor.id}`}
             placeholder={
               technicianName
                 ? `${technicianName} (you, default)`
                 : 'Who they’re here to see'
             }
             value={vendor.host ?? ''}
-            onChange={(e) => onChange({ host: e.target.value })}
-            title="Who the vendor is here to see. Security preps the visitor badge under this person and notifies them when the vendor signs in. Leave blank to use your own name; name a co-worker when they’re the point person that day (e.g. you’re on vacation)."
+            onChange={(e) => {
+              const name = e.target.value;
+              // If the typed/picked name matches a saved host with an
+              // email, pull their email in automatically.
+              const match = savedHosts.find(
+                (h) =>
+                  h.name.trim().toLowerCase() === name.trim().toLowerCase(),
+              );
+              onChange(
+                match?.email
+                  ? { host: name, hostEmail: match.email }
+                  : { host: name },
+              );
+            }}
+            title="Who the vendor is here to see. Security preps the visitor badge under this person and notifies them when the vendor signs in. Leave blank to use your own name; name a co-worker when they’re the point person that day (e.g. you’re on vacation). Pick a saved host from the dropdown to pull their email in."
           />
+          {savedHosts.length > 0 && (
+            <datalist id={`hosts-${vendor.id}`}>
+              {savedHosts.map((h) => (
+                <option key={h.id} value={h.name} />
+              ))}
+            </datalist>
+          )}
         </div>
         <div>
           <label className="label">
@@ -768,6 +817,31 @@ function VendorCard({
             onChange={(e) => onChange({ hostEmail: e.target.value })}
             title="Only needed when the host is someone other than you. When set, this address is CC'd on the security notification so the host is looped in. Leave blank when you're the host."
           />
+          <label
+            className={`flex items-center gap-2 text-xs mt-1 ${
+              hostVal ? 'text-slate-600' : 'text-slate-400 cursor-not-allowed'
+            }`}
+            title={
+              !hostVal
+                ? 'Type a host name first.'
+                : hostInBook
+                ? 'This host is in your host book. Uncheck to remove them.'
+                : 'Save this host (name + email) to your host book so you can pick them from the dropdown on future vendors.'
+            }
+          >
+            <input
+              type="checkbox"
+              disabled={!hostVal}
+              checked={hostInBook}
+              onChange={(e) => {
+                if (e.target.checked)
+                  onSaveHost(hostVal, vendor.hostEmail?.trim() || undefined);
+                else onRemoveHost(hostVal);
+              }}
+              className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 disabled:opacity-50"
+            />
+            Save host to book
+          </label>
         </div>
       </div>
 

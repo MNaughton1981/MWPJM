@@ -41,6 +41,7 @@ const TOC_ITEMS: PageTOCItem[] = [
   { id: 'sec-sync', label: 'Sync state via OneDrive', icon: '🔄' },
   { id: 'sec-excel', label: 'Excel backend (new!)', icon: '📊' },
   { id: 'sec-vendor-book', label: 'Vendor book', icon: '📒' },
+  { id: 'sec-host-book', label: 'Host book', icon: '🧑‍🔧' },
   { id: 'sec-vendor-events', label: 'Vendor events', icon: '📅' },
   { id: 'sec-backup', label: 'Manual backup', icon: '💾' },
   { id: 'sec-recovery', label: 'Recover photos', icon: '🛟' },
@@ -72,6 +73,8 @@ export default function SettingsPage() {
   const removeSavedVendor = useStore((s) => s.removeSavedVendor);
   const savedVendorEvents = useStore((s) => s.savedVendorEvents);
   const removeSavedVendorEvent = useStore((s) => s.removeSavedVendorEvent);
+  const savedHosts = useStore((s) => s.savedHosts);
+  const removeSavedHost = useStore((s) => s.removeSavedHost);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const syncFileRef = useRef<HTMLInputElement>(null);
@@ -96,7 +99,7 @@ export default function SettingsPage() {
   }, []);
 
   function exportBackup() {
-    const data = buildAppData(projects, settings, savedVendors, savedVendorEvents);
+    const data = buildAppData(projects, settings, savedVendors, savedVendorEvents, savedHosts);
     downloadJson(`mwpjm-backup-${new Date().toISOString().slice(0, 10)}.json`, data);
   }
 
@@ -177,6 +180,7 @@ export default function SettingsPage() {
         settings: data.settings ?? settings,
         savedVendors: data.savedVendors ?? [],
         savedVendorEvents: data.savedVendorEvents ?? [],
+        savedHosts: data.savedHosts ?? [],
       });
       setImportMsg(`Imported ${data.projects.length} project(s).`);
     } catch (e) {
@@ -889,6 +893,61 @@ export default function SettingsPage() {
                     }
                   }}
                   title="Delete this entry from the vendor book. Existing workboard vendors using this entry's info are unaffected."
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section id="sec-host-book" className="card p-4 space-y-3 scroll-mt-20">
+        <div>
+          <h2 className="font-semibold">Host book</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            People you name as the on-site <strong>host</strong> on a
+            vendor (usually a co-worker on the facilities team). Saved via
+            the <strong>Save host to book</strong> checkbox on a vendor
+            card. When you type a host name on a vendor, matching entries
+            appear in a dropdown and their email is pulled in
+            automatically — so the host gets CC'd on the security
+            notification without you re-typing it. Synced across devices.
+          </p>
+        </div>
+        {savedHosts.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            No saved hosts yet. Check <strong>Save host to book</strong> on
+            a vendor card to add one.
+          </p>
+        ) : (
+          <ul className="divide-y divide-slate-200">
+            {savedHosts.map((h) => (
+              <li
+                key={h.id}
+                className="py-2 flex items-start justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{h.name}</div>
+                  {h.email && (
+                    <div className="text-xs text-slate-500 mt-0.5 truncate">
+                      {h.email}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="btn-ghost text-xs text-rose-600 shrink-0"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Remove "${h.name}" from your host book?\n\nVendors that already name this host are unaffected — only the book entry is removed.`,
+                      )
+                    ) {
+                      removeSavedHost(h.id);
+                    }
+                  }}
+                  title="Delete this entry from the host book. Existing vendors that name this host are unaffected."
                 >
                   Remove
                 </button>
