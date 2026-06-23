@@ -5,6 +5,7 @@ import {
   buildMultiVendorSecurityNotification,
   buildSecurityNotification,
   buildVendorTableHtml,
+  buildSecurityEml,
   type MultiVendorSecurityNotificationArgs,
   type SecurityNotificationArgs,
 } from '../lib/security';
@@ -285,6 +286,50 @@ export default function VendorsSection({ project }: Props) {
   }
 
   /**
+   * "Draft in Outlook (.eml)" — builds a downloadable message file with
+   * the shaded visitor table already in the HTML body (X-Unsent: 1 makes
+   * Outlook open it as a sendable draft). Removes the copy/paste step on
+   * desktop Outlook. mailto: can't carry HTML, which is why this is a
+   * file rather than a link.
+   */
+  function draftInOutlook(alsoPostToNuvolo: boolean) {
+    if (!securityConfigured) return;
+    if (namedVendorCount === 0) {
+      window.alert('Add at least one visitor with a name first.');
+      return;
+    }
+    const args: MultiVendorSecurityNotificationArgs = {
+      vendors,
+      project: {
+        name: project.name,
+        workOrderId: project.workOrderId,
+        location: project.location,
+      },
+      securityEmail: settings.securityEmail ?? '',
+      ccSelf: settings.securityCcSelf,
+      userEmail: settings.userEmail,
+      preamble: settings.securityPreamble,
+      technicianName: settings.technicianName,
+      alsoPostToNuvolo,
+      nuvoloEmail: settings.nuvoloEmail,
+    };
+    const { filename, content } = buildSecurityEml(args);
+    const blob = new Blob([content], { type: 'message/rfc822' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 10000);
+    setCopyMsg(
+      'Outlook draft (.eml) downloaded — open it to send. The shaded table is already in the body (no paste). Best on desktop Outlook.',
+    );
+    window.setTimeout(() => setCopyMsg(''), 9000);
+  }
+
+  /**
    * Toggle a vendor's POC flag. Sending the vendor's id calls the
    * store action with radio semantics (auto-clears any other POC).
    * If the vendor is already POC, send `null` to clear it entirely.
@@ -510,6 +555,14 @@ export default function VendorsSection({ project }: Props) {
             )}
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3">
+            <button
+              type="button"
+              className="btn-ghost text-sm"
+              onClick={() => draftInOutlook(multiAlsoNuvolo && woValid)}
+              title="Download an Outlook draft (.eml) with the shaded visitor table already in the body — open it to send, no copy/paste. Best on desktop Outlook; on mobile use the Notify Security button instead."
+            >
+              📧 Draft in Outlook (.eml)
+            </button>
             <button
               type="button"
               className="btn-primary text-sm"

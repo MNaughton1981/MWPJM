@@ -646,3 +646,83 @@ export function buildMultiVendorSecurityNotification(
 
   return { to, cc, subject, body, href };
 }
+
+
+// ── Outlook draft (.eml) ─────────────────────────────────────────────
+//
+// mailto: bodies are plain-text only, so the shaded HTML table can't ride
+// in a mailto. To skip the copy/paste step we instead build a small .eml
+// message file with the HTML table already in the body and an
+// `X-Unsent: 1` header. Opened on a desktop with Outlook, it pops a
+// ready-to-send draft with the table in place — no paste. (Mobile .eml
+// handling is unreliable, so the mailto/plain-text path stays the mobile
+// fallback.)
+
+/** UTF-8-safe base64 (btoa only handles latin1). */
+function base64Utf8(s: string): string {
+  const bytes = new TextEncoder().encode(s);
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+
+/** Wrap a base64 string to 76-char lines (RFC 2045) with CRLFs. */
+function wrap76(s: string): string {
+  return (s.match(/.{1,76}/g) ?? []).join('\r\n');
+}
+
+/** RFC 2047-encode a header value when it contains non-ASCII (e.g. — ★). */
+function encodeHeaderValue(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return /[^\u0000-\u007F]/.test(s) ? `=?utf-8?B?${base64Utf8(s)}?=` : s;
+}
+
+/**
+ * Build an Outlook-openable draft (.eml) for the multi-vendor security
+ * notification: To/Cc/Subject from the standard builder, a plain-text
+ * part (fallback) and an HTML part carrying the shaded visitor table.
+ * `X-Unsent: 1` makes Outlook open it as a sendable draft.
+ */
+export function buildSecurityEml(args: MultiVendorSecurityNotificationArgs): {
+  filename: string;
+  content: string;
+} {
+  const mail = buildMultiVendorSecurityNotification(args);
+  const tableHtml = buildVendorTableHtml(args);
+  const htmlDoc =
+    `<!DOCTYPE html><html><body style="font-family:Arial,Helvetica,sans-serif">` +
+    `${tableHtml}</body></html>`;
+
+  const boundary = `=_MWPJM_${Date.now().toString(36)}`;
+  const lines: string[] = [
+    'X-Unsent: 1',
+    `To: ${mail.to}`,
+  ];
+  if (mail.cc) lines.push(`Cc: ${mail.cc}`);
+  lines.push(
+    `Subject: ${encodeHeaderValue(mail.subject)}`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset="utf-8"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    wrap76(base64Utf8(mail.body)),
+    '',
+    `--${boundary}`,
+    'Content-Type: text/html; charset="utf-8"',
+    'Content-Transfer-Encoding: base64',
+    '',
+    wrap76(base64Utf8(htmlDoc)),
+    '',
+    `--${boundary}--`,
+    '',
+  );
+
+  return {
+    // .eml so the OS hands it to the default mail app (Outlook on Windows).
+    filename: 'security-visit-notice.eml',
+    content: lines.join('\r\n'),
+  };
+}
