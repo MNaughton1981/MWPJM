@@ -393,6 +393,37 @@ function joinCcEmails(
 }
 
 /**
+ * Split a recipient field on commas / semicolons into trimmed, de-duped
+ * addresses. This lets the user put several security-team addresses in
+ * the single "Security team email" settings field (e.g. three people on
+ * the notify list) without us needing a dynamic multi-field UI, and
+ * without them having to create an Outlook distribution group.
+ */
+function parseRecipients(raw: string | undefined): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of (raw ?? '').split(/[,;]+/)) {
+    const v = part.trim();
+    if (!v) continue;
+    const k = v.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(v);
+  }
+  return out;
+}
+
+/**
+ * Build the mailto: recipient string: each address percent-encoded
+ * individually, joined with literal commas (per RFC 6068). Encoding the
+ * whole comma-joined string instead would turn the separators into
+ * %2C, which some mail clients mishandle as a single malformed address.
+ */
+function encodeMailtoTo(addresses: string[]): string {
+  return addresses.map((a) => encodeURIComponent(a)).join(',');
+}
+
+/**
  * Build a structured "vendor visit" notification email targeting the
  * facility security team. Single vendor flow.
  *
@@ -469,12 +500,13 @@ export function buildSecurityNotification(
   // Build To: field — security team is always primary recipient.
   // When also posting to Nuvolo, mathworks@service-now.com joins the
   // To: line (NOT CC:) so ServiceNow's inbound action processes it.
-  const securityTo = (args.securityEmail ?? '').trim();
+  const securityAddrs = parseRecipients(args.securityEmail);
   const nuvoloTo =
     postToNuvolo && args.nuvoloEmail ? args.nuvoloEmail.trim() : '';
-  const to = nuvoloTo
-    ? `${securityTo}, ${nuvoloTo}`
-    : securityTo;
+  const toAddrs = nuvoloTo ? [...securityAddrs, nuvoloTo] : securityAddrs;
+  // Human-readable form (also returned for display). The mailto path
+  // encodes each address individually and joins them with commas.
+  const to = toAddrs.join(', ');
 
   const cc = joinCcEmails(args.ccEmail, args.ccEmails);
 
@@ -485,7 +517,7 @@ export function buildSecurityNotification(
   // URLSearchParams encodes spaces as + which most mail clients accept,
   // but mailto: convention is %20 — replace to be safe.
   const query = params.toString().replace(/\+/g, '%20');
-  const href = `mailto:${encodeURIComponent(to)}?${query}`;
+  const href = `mailto:${encodeMailtoTo(toAddrs)}?${query}`;
 
   return { to, cc, subject, body, href };
 }
@@ -562,10 +594,11 @@ export function buildMultiVendorSecurityNotification(
   const body = lines.join('\n');
 
   // To: security + optionally Nuvolo (same routing rules as single).
-  const securityTo = (args.securityEmail ?? '').trim();
+  const securityAddrs = parseRecipients(args.securityEmail);
   const nuvoloTo =
     postToNuvolo && args.nuvoloEmail ? args.nuvoloEmail.trim() : '';
-  const to = nuvoloTo ? `${securityTo}, ${nuvoloTo}` : securityTo;
+  const toAddrs = nuvoloTo ? [...securityAddrs, nuvoloTo] : securityAddrs;
+  const to = toAddrs.join(', ');
 
   // CC: user's own email (if ccSelf) + POC email (if POC has one).
   // De-duped against itself in case the user IS the POC.
@@ -579,7 +612,7 @@ export function buildMultiVendorSecurityNotification(
   params.set('subject', subject);
   params.set('body', body);
   const query = params.toString().replace(/\+/g, '%20');
-  const href = `mailto:${encodeURIComponent(to)}?${query}`;
+  const href = `mailto:${encodeMailtoTo(toAddrs)}?${query}`;
 
   return { to, cc, subject, body, href };
 }
