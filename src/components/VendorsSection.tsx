@@ -1,13 +1,17 @@
 import { useMemo, useState } from 'react';
-import type { Project, SavedVendor, Vendor } from '../types';
+import type { Project, SavedVendor, Vendor, VendorVisit } from '../types';
 import { useStore } from '../state/store';
 import {
   buildMultiVendorSecurityNotification,
   buildSecurityNotification,
+  buildVendorTableHtml,
   type MultiVendorSecurityNotificationArgs,
   type SecurityNotificationArgs,
 } from '../lib/security';
 import { isValidWorkOrderId } from '../lib/nuvolo';
+import { copyRichText } from '../lib/destinations';
+import { uid } from '../lib/format';
+import { getVendorVisits } from '../lib/visits';
 import VisitTimeSelect from './VisitTimeSelect';
 
 interface Props {
@@ -48,6 +52,8 @@ export default function VendorsSection({ project }: Props) {
   const setPrimaryVendorContact = useStore((s) => s.setPrimaryVendorContact);
   const savedVendors = useStore((s) => s.savedVendors);
   const addOrUpdateSavedVendor = useStore((s) => s.addOrUpdateSavedVendor);
+  const addSavedVendorPurpose = useStore((s) => s.addSavedVendorPurpose);
+  const removeSavedVendorPurpose = useStore((s) => s.removeSavedVendorPurpose);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerFilter, setPickerFilter] = useState('');
   /**
@@ -58,6 +64,21 @@ export default function VendorsSection({ project }: Props) {
    * for the "covering for someone else" case.
    */
   const [multiAlsoNuvolo, setMultiAlsoNuvolo] = useState(true);
+
+  /**
+   * "Group all vendors into one notification" — checked by default
+   * because the common case is multiple vendors arriving for the same
+   * job on the same day (even from different companies), which security
+   * would rather receive as a single notice than N separate emails.
+   * When on, tapping ANY vendor's individual "Notify security" sends
+   * the combined notice. When off, individual buttons send per-vendor
+   * emails — but `notifySecurity` still ASKS whether to combine, so the
+   * grouping never gets silently skipped when it was probably intended.
+   */
+  const [groupVendors, setGroupVendors] = useState(true);
+
+  /** Transient confirmation message for the "Copy as table" action. */
+  const [copyMsg, setCopyMsg] = useState('');
 
   const vendors = project.vendors ?? [];
   // Optional chaining + fallback — settings.securityEmail may be undefined
@@ -117,11 +138,14 @@ export default function VendorsSection({ project }: Props) {
 
   /**
    * Insert a workboard vendor pre-filled from a saved book entry.
-   * Visit fields (visitDate, visitTime, notes) are left blank — those
-   * are visit-specific and should be filled in for this particular
-   * visit. The book entry's `generalNotes` get pre-filled into the
-   * workboard vendor's `notes` so they're visible on the card; the
-   * user can then append visit-specific text on top.
+   *
+   * Only the vendor's CONTACT info is copied (name, company, role,
+   * phone, email). Visit fields (dates, times) and notes are left
+   * blank — notes are per-visit and intentionally never saved to the
+   * book (Steve the sprinkler vendor needing data-center access this
+   * one time isn't worth remembering). The reusable thing is the
+   * vendor's recurring PURPOSES, which are offered as a dropdown in
+   * the Purpose field instead of being carried in via notes.
    */
   function addFromSaved(sv: SavedVendor) {
     addVendor(project.id, {
@@ -132,7 +156,7 @@ export default function VendorsSection({ project }: Props) {
       email: sv.email ?? '',
       visitDate: '',
       visitTime: '',
-      notes: sv.generalNotes ?? '',
+      notes: '',
     });
     setPickerOpen(false);
     setPickerFilter('');
@@ -150,6 +174,29 @@ export default function VendorsSection({ project }: Props) {
       window.alert('Add the vendor name first.');
       return;
     }
+
+    // When there are 2+ named vendors, the common intent is one combined
+    // notice for the whole crew. If the "Group all vendors" box is checked
+    // we just do that. If it's unchecked we ASK — so grouping is never
+    // silently skipped when it was probably what the user wanted.
+    if (namedVendorCount >= 2) {
+      if (groupVendors) {
+        notifySecurityAllVendors(alsoPostToNuvolo);
+        return;
+      }
+      const combine = window.confirm(
+        `There are ${namedVendorCount} vendors on this workboard.\n\n` +
+          `If they're coming for the same job, you can send ONE combined ` +
+          `notification instead of separate emails.\n\n` +
+          `OK  →  send one combined notification for all ${namedVendorCount} vendors\n` +
+          `Cancel  →  notify only ${vendor.name}`,
+      );
+      if (combine) {
+        notifySecurityAllVendors(alsoPostToNuvolo);
+        return;
+      }
+    }
+
     const args: SecurityNotificationArgs = {
       vendor,
       project: {
@@ -201,6 +248,42 @@ export default function VendorsSection({ project }: Props) {
     };
     const mail = buildMultiVendorSecurityNotification(args);
     window.location.href = mail.href;
+  }
+
+  /**
+   * Copy a shaded, rendered HTML table of all named vendors to the
+   * clipboard so the user can paste it into the Outlook compose window
+   * (Ctrl+V) for a real, easy-to-scan table. mailto: bodies are plain
+   * text only, so this clipboard route is the way to land actual row
+   * shading / color in the email — same pattern the project export uses.
+   * The plain-text multi-vendor body is written as the fallback so the
+   * paste still does something useful in clients without HTML clipboard.
+   */
+  async function copyVendorTable() {
+    if (namedVendorCount === 0) {
+      window.alert('Add at least one vendor with a name first.');
+      return;
+    }
+    const args: MultiVendorSecurityNotificationArgs = {
+      vendors,
+      project: {
+        name: project.name,
+        workOrderId: project.workOrderId,
+        location: project.location,
+      },
+      securityEmail: settings.securityEmail ?? '',
+      preamble: settings.securityPreamble,
+      technicianName: settings.technicianName,
+    };
+    const html = buildVendorTableHtml(args);
+    const plain = buildMultiVendorSecurityNotification(args).body;
+    const ok = await copyRichText(html, plain);
+    setCopyMsg(
+      ok
+        ? 'Formatted table copied — paste (Ctrl+V) into the email body.'
+        : 'Copy failed — clipboard not available on this browser.',
+    );
+    window.setTimeout(() => setCopyMsg(''), 6000);
   }
 
   /**
@@ -276,7 +359,7 @@ export default function VendorsSection({ project }: Props) {
                       className="block w-full text-left px-1.5 py-1.5 rounded hover:bg-slate-50 text-sm"
                       title={`Add ${sv.name}${
                         sv.company ? ' — ' + sv.company : ''
-                      } to this workboard. Visit date / time are left blank for you to fill in.`}
+                      } to this workboard. Contact info only — pick a purpose and fill in the visit details on the card.`}
                     >
                       <div className="font-medium truncate">
                         {sv.name}
@@ -292,6 +375,11 @@ export default function VendorsSection({ project }: Props) {
                           .filter(Boolean)
                           .join(' · ')}
                       </div>
+                      {sv.purposes && sv.purposes.length > 0 && (
+                        <div className="text-[11px] text-slate-400 truncate">
+                          Purposes: {sv.purposes.join(', ')}
+                        </div>
+                      )}
                     </button>
                   ))
                 )}
@@ -335,18 +423,34 @@ export default function VendorsSection({ project }: Props) {
                   role: v.role,
                   phone: v.phone,
                   email: v.email,
-                  // The workboard `notes` field is visit-specific in
-                  // intent, but we use it as the seed for the book
-                  // entry's generalNotes when saving. The user can
-                  // edit the book entry afterwards via Settings →
-                  // Vendor Book if they want different general notes.
-                  generalNotes: v.notes,
+                  // Notes are deliberately NOT saved to the book — they're
+                  // per-visit (this time's access needs, scope, etc.) and
+                  // rarely worth remembering. The reusable bits are the
+                  // contact info above and the vendor's purposes, which are
+                  // saved separately via the "Save purpose to book" checkbox.
                 })
               }
               isInBook={isVendorInBook(v, savedVendors)}
+              savedPurposes={findSavedVendor(v, savedVendors)?.purposes ?? []}
+              onSavePurpose={(purpose) =>
+                addSavedVendorPurpose(
+                  {
+                    name: v.name,
+                    company: v.company,
+                    role: v.role,
+                    phone: v.phone,
+                    email: v.email,
+                  },
+                  purpose,
+                )
+              }
+              onRemovePurpose={(purpose) =>
+                removeSavedVendorPurpose(v.name, v.company, purpose)
+              }
               securityConfigured={securityConfigured}
               hasValidWorkOrder={woValid}
               workOrderId={project.workOrderId}
+              technicianName={settings.technicianName}
             />
           ))}
         </ul>
@@ -358,32 +462,59 @@ export default function VendorsSection({ project }: Props) {
           whole crew" — so showing it for a single vendor would be
           redundant and confusing. */}
       {securityConfigured && namedVendorCount >= 2 && (
-        <div className="border-t pt-3 flex flex-wrap items-center justify-end gap-3">
-          {woValid && (
-            <label className="flex items-center gap-2 text-xs text-slate-600">
+        <div className="border-t pt-3 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <label
+              className="flex items-center gap-2 text-xs text-slate-700"
+              title="On (recommended for same-day visits): tapping any vendor's Notify Security sends ONE combined email covering everyone. Off: individual emails — but you'll be asked whether to combine."
+            >
               <input
                 type="checkbox"
-                checked={multiAlsoNuvolo}
-                onChange={(e) => setMultiAlsoNuvolo(e.target.checked)}
+                checked={groupVendors}
+                onChange={(e) => setGroupVendors(e.target.checked)}
                 className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
               />
-              Also post to Nuvolo ({project.workOrderId})
+              Group all vendors into one notification
             </label>
+            {woValid && (
+              <label className="flex items-center gap-2 text-xs text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={multiAlsoNuvolo}
+                  onChange={(e) => setMultiAlsoNuvolo(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                />
+                Also post to Nuvolo ({project.workOrderId})
+              </label>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <button
+              type="button"
+              className="btn-ghost text-sm"
+              onClick={copyVendorTable}
+              title="Copy a formatted, shaded table of all vendors. Paste it (Ctrl+V) into the email body — Outlook renders it as a real table with colored rows."
+            >
+              📋 Copy as table
+            </button>
+            <button
+              type="button"
+              className="btn-primary text-sm"
+              onClick={() =>
+                notifySecurityAllVendors(multiAlsoNuvolo && woValid)
+              }
+              title={
+                multiAlsoNuvolo && woValid
+                  ? `Open mail to security + Nuvolo (${project.workOrderId}) with one combined notice covering all ${namedVendorCount} vendors`
+                  : `Open mail with one combined notice covering all ${namedVendorCount} vendors`
+              }
+            >
+              🛡️ Notify security (all {namedVendorCount} vendors) →
+            </button>
+          </div>
+          {copyMsg && (
+            <p className="text-xs text-emerald-700 text-right">{copyMsg}</p>
           )}
-          <button
-            type="button"
-            className="btn-primary text-sm"
-            onClick={() =>
-              notifySecurityAllVendors(multiAlsoNuvolo && woValid)
-            }
-            title={
-              multiAlsoNuvolo && woValid
-                ? `Open mail to security + Nuvolo (${project.workOrderId}) with one combined notice covering all ${namedVendorCount} vendors`
-                : `Open mail with one combined notice covering all ${namedVendorCount} vendors`
-            }
-          >
-            🛡️ Notify security (all {namedVendorCount} vendors) →
-          </button>
         </div>
       )}
 
@@ -412,6 +543,23 @@ function isVendorInBook(v: Vendor, book: SavedVendor[]): boolean {
   return book.some((sv) => key(sv.name, sv.company) === k);
 }
 
+/**
+ * Find the saved-book entry matching a workboard vendor by the same
+ * name+company key the store uses. Returns undefined when the vendor
+ * isn't in the book yet. Used to surface that vendor's saved purposes
+ * as a dropdown in the Purpose field.
+ */
+function findSavedVendor(
+  v: Vendor,
+  book: SavedVendor[],
+): SavedVendor | undefined {
+  if (!v.name.trim()) return undefined;
+  const key = (n: string | undefined, c: string | undefined): string =>
+    `${(n || '').trim().toLowerCase()}|${(c || '').trim().toLowerCase()}`;
+  const k = key(v.name, v.company);
+  return book.find((sv) => key(sv.name, sv.company) === k);
+}
+
 function VendorCard({
   vendor,
   onChange,
@@ -420,9 +568,13 @@ function VendorCard({
   onNotifySecurity,
   onSaveToBook,
   isInBook,
+  savedPurposes,
+  onSavePurpose,
+  onRemovePurpose,
   securityConfigured,
   hasValidWorkOrder,
   workOrderId,
+  technicianName,
 }: {
   vendor: Vendor;
   onChange: (patch: Partial<Vendor>) => void;
@@ -431,13 +583,67 @@ function VendorCard({
   onNotifySecurity: (alsoPostToNuvolo: boolean) => void;
   onSaveToBook: () => void;
   isInBook: boolean;
+  savedPurposes: string[];
+  onSavePurpose: (purpose: string) => void;
+  onRemovePurpose: (purpose: string) => void;
   securityConfigured: boolean;
   hasValidWorkOrder: boolean;
   workOrderId?: string;
+  technicianName?: string;
 }) {
   // Per-card state: defaults to ON when a valid WO ID exists.
   const [alsoNuvolo, setAlsoNuvolo] = useState(hasValidWorkOrder);
   const isPoc = !!vendor.isPrimaryContact;
+
+  // ── Visit schedule editing ──────────────────────────────────────
+  // A vendor may come on several dates, or across a run of consecutive
+  // days. `visitRows` is what the editor renders: the stored visits, or
+  // a single blank draft row when there's nothing yet. Commits write the
+  // raw array (no pruning) so a freshly-added blank row sticks while it's
+  // being filled in; the email layer drops blanks via meaningfulVisits().
+  const storedVisits = getVendorVisits(vendor);
+  const visitRows: VendorVisit[] =
+    storedVisits.length > 0
+      ? storedVisits
+      : [{ id: '__draft', date: '', time: '' }];
+
+  function commitVisits(rows: VendorVisit[]) {
+    // Replace placeholder/legacy ids with real ones on first real edit.
+    const normalized = rows.map((r) =>
+      r.id === '__draft' || r.id === 'legacy' ? { ...r, id: uid() } : r,
+    );
+    const first = normalized.find((v) => v.date || v.time);
+    onChange({
+      visits: normalized,
+      // Mirror the first meaningful visit into the legacy flat fields so
+      // Excel export and any flat-field reader stay correct.
+      visitDate: first?.date ?? '',
+      visitTime: first?.time ?? '',
+    });
+  }
+
+  function updateVisit(idx: number, patch: Partial<VendorVisit>) {
+    commitVisits(
+      visitRows.map((r, i) => (i === idx ? { ...r, ...patch } : r)),
+    );
+  }
+  function addVisit() {
+    commitVisits([...visitRows, { id: uid(), date: '', time: '' }]);
+  }
+  function removeVisit(idx: number) {
+    commitVisits(visitRows.filter((_, i) => i !== idx));
+  }
+
+  // ── Purpose of visit ────────────────────────────────────────────
+  const purposeVal = (vendor.purpose ?? '').trim();
+  // Can only save a purpose to the book when we have both a vendor name
+  // (the book is keyed by name+company) and a non-empty purpose.
+  const canSavePurpose = !!purposeVal && !!vendor.name.trim();
+  const purposeSaved =
+    canSavePurpose &&
+    savedPurposes.some(
+      (p) => p.trim().toLowerCase() === purposeVal.toLowerCase(),
+    );
 
   return (
     <li
@@ -531,24 +737,138 @@ function VendorCard({
           />
         </div>
         <div>
-          <label className="label">Visit date</label>
+          <label className="label">Host</label>
           <input
-            type="date"
             className="input"
-            value={vendor.visitDate ?? ''}
-            onChange={(e) =>
-              onChange({ visitDate: e.target.value || undefined })
+            placeholder={
+              technicianName
+                ? `${technicianName} (you, default)`
+                : 'Who they’re here to see'
             }
+            value={vendor.host ?? ''}
+            onChange={(e) => onChange({ host: e.target.value })}
+            title="Who the vendor is here to see. Security preps the visitor badge under this person and notifies them when the vendor signs in. Leave blank to use your own name; name a co-worker when they’re the point person that day (e.g. you’re on vacation)."
           />
         </div>
-        <div>
-          <label className="label">Visit time</label>
-          <VisitTimeSelect
-            value={vendor.visitTime ?? ''}
-            onChange={(v) => onChange({ visitTime: v || undefined })}
-            title="Pick the on-site time. Goes into the security notification email."
+      </div>
+
+      <div>
+        <label className="label">Purpose of visit</label>
+        <input
+          className="input"
+          list={`purposes-${vendor.id}`}
+          placeholder="e.g. Quarterly PM, Leak repair, Install"
+          value={vendor.purpose ?? ''}
+          onChange={(e) => onChange({ purpose: e.target.value })}
+          title="Why the vendor is on-site this time. Pick a saved purpose from the dropdown or type a new one."
+        />
+        {savedPurposes.length > 0 && (
+          <datalist id={`purposes-${vendor.id}`}>
+            {savedPurposes.map((p) => (
+              <option key={p} value={p} />
+            ))}
+          </datalist>
+        )}
+        <label
+          className={`flex items-center gap-2 text-xs mt-1 ${
+            canSavePurpose
+              ? 'text-slate-600'
+              : 'text-slate-400 cursor-not-allowed'
+          }`}
+          title={
+            !vendor.name.trim()
+              ? 'Add the vendor name first — the book is keyed by vendor.'
+              : !purposeVal
+              ? 'Type a purpose first.'
+              : purposeSaved
+              ? 'This purpose is saved to the vendor’s book. Uncheck to remove it.'
+              : 'Save this purpose to the vendor’s book so you can pick it from the dropdown next time.'
+          }
+        >
+          <input
+            type="checkbox"
+            disabled={!canSavePurpose}
+            checked={purposeSaved}
+            onChange={(e) => {
+              if (e.target.checked) onSavePurpose(purposeVal);
+              else onRemovePurpose(purposeVal);
+            }}
+            className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 disabled:opacity-50"
           />
+          Save purpose to book
+        </label>
+      </div>
+
+      <div>
+        <label className="label">Visit schedule</label>
+        <div className="space-y-1.5">
+          {visitRows.map((row, idx) => (
+            <div key={row.id} className="flex flex-wrap items-end gap-1.5">
+              <div className="flex flex-col">
+                <span className="text-[10px] text-slate-400 leading-tight">
+                  Date
+                </span>
+                <input
+                  type="date"
+                  className="input w-auto"
+                  value={row.date ?? ''}
+                  onChange={(e) =>
+                    updateVisit(idx, { date: e.target.value || undefined })
+                  }
+                  title="Start date for this visit"
+                />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] text-slate-400 leading-tight">
+                  to (optional)
+                </span>
+                <input
+                  type="date"
+                  className="input w-auto"
+                  value={row.endDate ?? ''}
+                  min={row.date || undefined}
+                  onChange={(e) =>
+                    updateVisit(idx, { endDate: e.target.value || undefined })
+                  }
+                  title="Optional end date — set this for a run of consecutive days (e.g. Sat through Sun). Leave blank for a single day."
+                />
+              </div>
+              <div className="flex flex-col flex-1 min-w-[7.5rem]">
+                <span className="text-[10px] text-slate-400 leading-tight">
+                  Time
+                </span>
+                <VisitTimeSelect
+                  value={row.time ?? ''}
+                  onChange={(v) => updateVisit(idx, { time: v || undefined })}
+                  title="Time for this visit. Goes into the security notification."
+                />
+              </div>
+              {visitRows.length > 1 && (
+                <button
+                  type="button"
+                  className="text-slate-400 hover:text-rose-600 px-1 text-lg shrink-0 self-center"
+                  onClick={() => removeVisit(idx)}
+                  aria-label="Remove this date"
+                  title="Remove this date"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
         </div>
+        <button
+          type="button"
+          className="btn-ghost text-xs mt-1.5"
+          onClick={addVisit}
+          title="Add another date — e.g. a tech who comes Friday to prep, then back Saturday–Sunday with the crew. Every date goes into one security notification."
+        >
+          + Add another date
+        </button>
+        <p className="text-[11px] text-slate-500 mt-1">
+          Multiple dates for one vendor all go in a single notification.
+          Use the “to” date for a run of consecutive days.
+        </p>
       </div>
 
       <div>
@@ -595,7 +915,7 @@ function VendorCard({
               ? 'Enter the vendor name first.'
               : isInBook
               ? 'This vendor is in your book. Tap to update with the current field values.'
-              : 'Save name, company, role, phone, email and any general notes to your vendor book for one-tap reuse on future workboards.'
+              : 'Save this vendor’s contact info (name, company, role, phone, email) to your vendor book for one-tap reuse. Notes are not saved — they’re per-visit. Save recurring reasons for being on-site with the “Save purpose to book” checkbox instead.'
           }
         >
           {isInBook ? '✓ In book' : '💾 Save to book'}

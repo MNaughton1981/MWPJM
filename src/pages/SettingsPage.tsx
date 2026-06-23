@@ -416,17 +416,19 @@ export default function SettingsPage() {
       <section id="sec-security" className="card p-4 space-y-3 scroll-mt-20">
         <h2 className="font-semibold">Security team notifications</h2>
         <div>
-          <label className="label">Security team email</label>
+          <label className="label">Security team email(s)</label>
           <input
             className="input"
-            type="email"
-            placeholder="security@mathworks.com"
+            type="text"
+            placeholder="security@mathworks.com  —  or several: a@…, b@…, c@…"
             value={settings.securityEmail}
             onChange={(e) => setSettings({ securityEmail: e.target.value })}
           />
           <p className="text-xs text-slate-500 mt-1">
-            Where the per-vendor "🛡️ Notify security" button sends its
-            structured visit-notice email. If blank, the button is disabled.
+            Where the "🛡️ Notify security" button sends its structured
+            visit notice. Enter one address, or several separated by
+            commas or semicolons — they all go on the To: line (no need to
+            create a distribution group). If blank, the button is disabled.
           </p>
         </div>
         <div>

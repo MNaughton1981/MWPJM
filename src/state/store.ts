@@ -21,6 +21,28 @@ import {
 import { DEFAULT_SECURITY_PREAMBLE } from '../lib/security';
 import { uid } from '../lib/format';
 
+/**
+ * Merge two purpose lists into one, deduped case-insensitively while
+ * preserving the original casing and first-seen order. Used to build up
+ * a vendor's saved purposes without creating "PM" / "pm" duplicates.
+ */
+function unionPurposes(
+  existing: string[] | undefined,
+  incoming: string[] | undefined,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of [...(existing ?? []), ...(incoming ?? [])]) {
+    const v = (raw ?? '').trim();
+    if (!v) continue;
+    const k = v.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(v);
+  }
+  return out;
+}
+
 interface AppState {
   projects: Project[];
   settings: Settings;
@@ -178,6 +200,28 @@ interface AppState {
   addOrUpdateSavedVendor: (template: Omit<SavedVendor, 'id'>) => string;
   /** Delete a saved vendor from the book by id. */
   removeSavedVendor: (id: string) => void;
+  /**
+   * Append an on-site purpose to a vendor's book entry, finding it by
+   * (name, company) or creating the entry from the supplied contact
+   * info if it doesn't exist yet. Deduped case-insensitively. No-op for
+   * a blank purpose.
+   */
+  addSavedVendorPurpose: (
+    contact: {
+      name: string;
+      company?: string;
+      role?: string;
+      phone?: string;
+      email?: string;
+    },
+    purpose: string,
+  ) => void;
+  /** Remove a saved purpose from a vendor's book entry (by name+company). */
+  removeSavedVendorPurpose: (
+    name: string,
+    company: string | undefined,
+    purpose: string,
+  ) => void;
 
   // Saved vendor events (recurring service / notification templates).
   /**
@@ -559,6 +603,12 @@ export const useStore = create<AppState>()(
           );
           if (existingIdx >= 0) {
             const existing = s.savedVendors[existingIdx];
+            // Union any incoming purposes with existing ones (case-
+            // insensitive dedupe, original casing preserved).
+            const mergedPurposes = unionPurposes(
+              existing.purposes,
+              template.purposes,
+            );
             const merged: SavedVendor = {
               ...existing,
               // Take incoming non-empty fields; preserve existing otherwise.
@@ -568,6 +618,7 @@ export const useStore = create<AppState>()(
               ...(template.generalNotes?.trim()
                 ? { generalNotes: template.generalNotes }
                 : {}),
+              ...(mergedPurposes.length ? { purposes: mergedPurposes } : {}),
               // name + company already match by key (modulo case/trim) —
               // re-canonicalize to whatever the user just typed so updates
               // to capitalization or whitespace flow through.
@@ -587,6 +638,9 @@ export const useStore = create<AppState>()(
             phone: template.phone?.trim() || undefined,
             email: template.email?.trim() || undefined,
             generalNotes: template.generalNotes?.trim() || undefined,
+            ...(template.purposes && template.purposes.length
+              ? { purposes: unionPurposes([], template.purposes) }
+              : {}),
           };
           resultId = created.id;
           return {
@@ -602,6 +656,69 @@ export const useStore = create<AppState>()(
         set((s) => ({
           savedVendors: s.savedVendors.filter((sv) => sv.id !== id),
         })),
+
+      addSavedVendorPurpose: (contact, purpose) => {
+        const p = purpose.trim();
+        if (!p) return;
+        const key = (n: string, c: string | undefined): string =>
+          `${(n || '').trim().toLowerCase()}|${(c || '').trim().toLowerCase()}`;
+        const incomingKey = key(contact.name, contact.company);
+        set((s) => {
+          const idx = s.savedVendors.findIndex(
+            (sv) => key(sv.name, sv.company) === incomingKey,
+          );
+          if (idx >= 0) {
+            // Append to the existing book entry's purpose list.
+            const existing = s.savedVendors[idx];
+            const next = s.savedVendors.slice();
+            next[idx] = {
+              ...existing,
+              purposes: unionPurposes(existing.purposes, [p]),
+            };
+            return { savedVendors: next };
+          }
+          // No book entry yet — create one (contact info + this purpose)
+          // so checking "Save purpose to book" works even for a vendor
+          // the user hasn't explicitly saved to the book.
+          const created: SavedVendor = {
+            id: uid(),
+            name: contact.name.trim(),
+            company: contact.company?.trim() || undefined,
+            role: contact.role?.trim() || undefined,
+            phone: contact.phone?.trim() || undefined,
+            email: contact.email?.trim() || undefined,
+            purposes: [p],
+          };
+          return {
+            savedVendors: [...s.savedVendors, created].sort((a, b) =>
+              a.name.localeCompare(b.name),
+            ),
+          };
+        });
+      },
+
+      removeSavedVendorPurpose: (name, company, purpose) => {
+        const target = purpose.trim().toLowerCase();
+        const key = (n: string, c: string | undefined): string =>
+          `${(n || '').trim().toLowerCase()}|${(c || '').trim().toLowerCase()}`;
+        const incomingKey = key(name, company);
+        set((s) => {
+          const idx = s.savedVendors.findIndex(
+            (sv) => key(sv.name, sv.company) === incomingKey,
+          );
+          if (idx < 0) return {};
+          const existing = s.savedVendors[idx];
+          const remaining = (existing.purposes ?? []).filter(
+            (p) => p.trim().toLowerCase() !== target,
+          );
+          const next = s.savedVendors.slice();
+          next[idx] = {
+            ...existing,
+            purposes: remaining.length ? remaining : undefined,
+          };
+          return { savedVendors: next };
+        });
+      },
 
       addSavedVendorEvent: (template) => {
         const now = Date.now();
