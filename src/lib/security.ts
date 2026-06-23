@@ -725,9 +725,32 @@ export function buildSecurityEml(args: MultiVendorSecurityNotificationArgs): {
     '',
   );
 
+  // Unique, human-meaningful filename so each draft downloads as its own
+  // file instead of colliding on one constant name (which the browser
+  // would suffix " (1)", " (2)", … and which made re-opening the right
+  // one unreliable). Includes the lead company/visitor + a timestamp.
+  const named = args.vendors.filter((v) => v.name.trim());
+  const lead = named.find((v) => v.isPrimaryContact) ?? named[0];
+  const labelRaw =
+    lead?.company?.trim() ||
+    lead?.name?.trim() ||
+    args.project.name ||
+    'security';
+  const slug =
+    labelRaw
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40) || 'security';
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const stamp =
+    `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}` +
+    `-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+
   return {
     // .eml so the OS hands it to the default mail app (Outlook on Windows).
-    filename: 'security-visit-notice.eml',
+    filename: `visit-notice-${slug}-${stamp}.eml`,
     content: lines.join('\r\n'),
   };
 }
