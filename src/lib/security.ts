@@ -111,7 +111,7 @@ function nl2brHtml(s: string): string {
  * contact is highlighted amber and tagged with a ★.
  *
  * Returns an HTML fragment (preamble paragraph + visit-context block +
- * table + "requested by" line). Pair it with the plain-text body from
+ * table). Pair it with the plain-text body from
  * `buildMultiVendorSecurityNotification` as the clipboard fallback.
  */
 export function buildVendorTableHtml(
@@ -165,12 +165,15 @@ export function buildVendorTableHtml(
       ? `<a href="mailto:${escHtml(v.email)}">${escHtml(v.email)}</a>`
       : '';
 
+    const host = v.host?.trim() || args.technicianName || '';
+
     return `<tr style="background:${bg}">
       <td style="${cellStyle}"><b>${nameCell}</b></td>
       <td style="${cellStyle}">${escHtml(v.company ?? '')}</td>
       <td style="${cellStyle}">${escHtml(v.role ?? '')}</td>
       <td style="${cellStyle}">${escHtml(v.phone ?? '')}</td>
       <td style="${cellStyle}">${email}</td>
+      <td style="${cellStyle}">${escHtml(host)}</td>
       <td style="${cellStyle}">${visitHtml}</td>
     </tr>`;
   });
@@ -183,17 +186,12 @@ export function buildVendorTableHtml(
         <th style="${headStyle}">Role / purpose</th>
         <th style="${headStyle}">Phone</th>
         <th style="${headStyle}">Email</th>
+        <th style="${headStyle}">Host</th>
         <th style="${headStyle}">Visit</th>
       </tr></thead>
       <tbody>${rows.join('')}</tbody>
     </table>`,
   );
-
-  if (args.technicianName) {
-    parts.push(
-      `<p style="${baseFont}">Requested by: ${escHtml(args.technicianName)}</p>`,
-    );
-  }
 
   return parts.join('\n');
 }
@@ -241,7 +239,7 @@ function pad(label: string): string {
  */
 function renderVendorBlock(
   vendor: Vendor,
-  opts: { headingLabel: string; markPrimary?: boolean },
+  opts: { headingLabel: string; markPrimary?: boolean; host?: string },
 ): string[] {
   const lines: string[] = [];
   lines.push(heading(opts.headingLabel));
@@ -256,6 +254,10 @@ function renderVendorBlock(
   if (vendor.role) lines.push(`${pad('Role')}: ${vendor.role}`);
   if (vendor.phone) lines.push(`${pad('Phone')}: ${vendor.phone}`);
   if (vendor.email) lines.push(`${pad('Email')}: ${vendor.email}`);
+
+  // Host — who the vendor is here to see / who security preps the badge
+  // under. Resolved (vendor.host || technicianName) by the caller.
+  if (opts.host) lines.push(`${pad('Host')}: ${opts.host}`);
 
   // Visit schedule. A vendor may come on more than one date, or across
   // a run of consecutive days. One date → a single "Visit:" line. Two
@@ -342,10 +344,9 @@ function joinCcEmails(
  *   Company   : <co>
  *   Phone     : <phone>
  *   Email     : <email>
+ *   Host      : <host or technician>
  *   Visit     : <date>, <time>
  *   Notes     : <notes>
- *
- *   Requested by: <technician>
  *
  * The ★ POC marker only appears when the vendor's `isPrimaryContact`
  * flag is set. The CC line includes the user's own email (when
@@ -393,13 +394,9 @@ export function buildSecurityNotification(
     ...renderVendorBlock(args.vendor, {
       headingLabel: 'Vendor',
       markPrimary: !!args.vendor.isPrimaryContact,
+      host: args.vendor.host?.trim() || args.technicianName,
     }),
   );
-
-  if (args.technicianName) {
-    lines.push('');
-    lines.push(`Requested by: ${args.technicianName}`);
-  }
 
   const body = lines.join('\n');
 
@@ -491,14 +488,10 @@ export function buildMultiVendorSecurityNotification(
         headingLabel:
           orderedVendors.length === 1 ? 'Vendor' : `Vendor ${i + 1}`,
         markPrimary: !!v.isPrimaryContact,
+        host: v.host?.trim() || args.technicianName,
       }),
     );
   });
-
-  if (args.technicianName) {
-    lines.push('');
-    lines.push(`Requested by: ${args.technicianName}`);
-  }
 
   const body = lines.join('\n');
 

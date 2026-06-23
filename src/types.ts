@@ -77,6 +77,19 @@ export interface Vendor {
   role?: string; // free-form, e.g. "Plumber", "Electrician"
   phone?: string;
   email?: string;
+  /**
+   * On-site host for this vendor's visit — the person security lists as
+   * "who are you here to see?", preps the badge under, and notifies when
+   * the vendor signs in. Per-vendor (not per-workboard) so a job spanning
+   * multiple days / people can name a different point person per vendor —
+   * e.g. the coordinator is out on vacation the day of the work, so a
+   * covering co-worker is named as the host for that day's vendors.
+   *
+   * When blank, notifications fall back to the technician's own name
+   * (settings.technicianName) — the common case where the coordinator is
+   * also the host. Set it explicitly only when someone else is covering.
+   */
+  host?: string;
   visitDate?: string; // ISO date (YYYY-MM-DD)
   /**
    * Free-form visit time hint, surfaced in the security notification

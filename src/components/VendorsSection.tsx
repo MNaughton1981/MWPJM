@@ -446,6 +446,7 @@ export default function VendorsSection({ project }: Props) {
               securityConfigured={securityConfigured}
               hasValidWorkOrder={woValid}
               workOrderId={project.workOrderId}
+              technicianName={settings.technicianName}
             />
           ))}
         </ul>
@@ -549,6 +550,7 @@ function VendorCard({
   securityConfigured,
   hasValidWorkOrder,
   workOrderId,
+  technicianName,
 }: {
   vendor: Vendor;
   onChange: (patch: Partial<Vendor>) => void;
@@ -560,6 +562,7 @@ function VendorCard({
   securityConfigured: boolean;
   hasValidWorkOrder: boolean;
   workOrderId?: string;
+  technicianName?: string;
 }) {
   // Per-card state: defaults to ON when a valid WO ID exists.
   const [alsoNuvolo, setAlsoNuvolo] = useState(hasValidWorkOrder);
@@ -693,6 +696,20 @@ function VendorCard({
             placeholder="joe@acme.com"
             value={vendor.email ?? ''}
             onChange={(e) => onChange({ email: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="label">Host</label>
+          <input
+            className="input"
+            placeholder={
+              technicianName
+                ? `${technicianName} (you, default)`
+                : 'Who they’re here to see'
+            }
+            value={vendor.host ?? ''}
+            onChange={(e) => onChange({ host: e.target.value })}
+            title="Who the vendor is here to see. Security preps the visitor badge under this person and notifies them when the vendor signs in. Leave blank to use your own name; name a co-worker when they’re the point person that day (e.g. you’re on vacation)."
           />
         </div>
       </div>
