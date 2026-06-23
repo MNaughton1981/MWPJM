@@ -374,17 +374,16 @@ function renderVisitContextBlock(
 }
 
 /**
- * Combine the legacy `ccEmail` + new `ccEmails` array into a single
- * deduped, case-insensitive CC string. Empty / whitespace entries
- * are dropped. Returns `undefined` when there's nothing to CC, so
- * the URLSearchParams builder can omit the `cc` parameter entirely
- * rather than emitting an empty `cc=` (which some mail clients
- * still surface as a blank CC field).
+ * Combine the legacy `ccEmail` + new `ccEmails` array into a deduped,
+ * case-insensitive list of CC addresses (empty / whitespace dropped).
+ * Returns an array so callers can join with the right separator for the
+ * surface: commas for `.eml` headers (RFC 5322), semicolons for `mailto:`
+ * (which is what Outlook splits on).
  */
-function joinCcEmails(
+function collectCcAddresses(
   legacy: string | undefined,
   extras: ReadonlyArray<string | undefined> | undefined,
-): string | undefined {
+): string[] {
   const all = [legacy, ...(extras ?? [])];
   const seen = new Set<string>();
   const out: string[] = [];
@@ -396,7 +395,7 @@ function joinCcEmails(
     seen.add(k);
     out.push(v);
   }
-  return out.length > 0 ? out.join(', ') : undefined;
+  return out;
 }
 
 /**
@@ -422,12 +421,13 @@ function parseRecipients(raw: string | undefined): string[] {
 
 /**
  * Build the mailto: recipient string: each address percent-encoded
- * individually, joined with literal commas (per RFC 6068). Encoding the
- * whole comma-joined string instead would turn the separators into
- * %2C, which some mail clients mishandle as a single malformed address.
+ * individually, joined with literal SEMICOLONS. Outlook (the target
+ * client) only splits mailto recipients on ";" — a comma-joined string
+ * lands as a single malformed address. (.eml headers, by contrast, use
+ * commas per RFC 5322; see buildSecurityEml.)
  */
 function encodeMailtoTo(addresses: string[]): string {
-  return addresses.map((a) => encodeURIComponent(a)).join(',');
+  return addresses.map((a) => encodeURIComponent(a)).join(';');
 }
 
 /**
@@ -513,14 +513,17 @@ export function buildSecurityNotification(
   const nuvoloTo =
     postToNuvolo && args.nuvoloEmail ? args.nuvoloEmail.trim() : '';
   const toAddrs = nuvoloTo ? [...securityAddrs, nuvoloTo] : securityAddrs;
-  // Human-readable form (also returned for display). The mailto path
-  // encodes each address individually and joins them with commas.
+  // `to` (returned, comma-joined) feeds the .eml To: header (RFC 5322)
+  // and display; the mailto href joins with semicolons for Outlook.
   const to = toAddrs.join(', ');
 
-  const cc = joinCcEmails(args.ccEmail, args.ccEmails);
+  const ccAddrs = collectCcAddresses(args.ccEmail, args.ccEmails);
+  const cc = ccAddrs.length ? ccAddrs.join(', ') : undefined;
 
   const params = new URLSearchParams();
-  if (cc) params.set('cc', cc);
+  // Semicolons so Outlook splits the CC into separate recipients
+  // (a comma-joined value lands as one bad address).
+  if (ccAddrs.length) params.set('cc', ccAddrs.join('; '));
   params.set('subject', subject);
   params.set('body', body);
   // URLSearchParams encodes spaces as + which most mail clients accept,
@@ -631,14 +634,16 @@ export function buildMultiVendorSecurityNotification(
   const hostCcs = orderedVendors
     .map((v) => v.hostEmail?.trim())
     .filter((e): e is string => !!e && e.toLowerCase() !== userEmailLc);
-  const cc = joinCcEmails(undefined, [
+  const ccAddrs = collectCcAddresses(undefined, [
     args.ccSelf ? args.userEmail : undefined,
     poc?.email,
     ...hostCcs,
   ]);
+  const cc = ccAddrs.length ? ccAddrs.join(', ') : undefined;
 
   const params = new URLSearchParams();
-  if (cc) params.set('cc', cc);
+  // Semicolons so Outlook splits the CC into separate recipients.
+  if (ccAddrs.length) params.set('cc', ccAddrs.join('; '));
   params.set('subject', subject);
   params.set('body', body);
   const query = params.toString().replace(/\+/g, '%20');
