@@ -78,6 +78,123 @@ export interface SecurityMail {
   href: string;
 }
 
+// ─── Rich-HTML table formatting ──────────────────────────────────────
+//
+// mailto: bodies can only ever be plain text, so colored / shaded tables
+// can't ride along in the auto-filled email body. The app's established
+// pattern (see exporters.ts + destinations.copyRichText) is to write
+// rich HTML to the clipboard so the user pastes a real, rendered table
+// into their Outlook compose window. `buildVendorTableHtml` produces
+// that table: a header row, one row per vendor, zebra striping for
+// readability, and an amber-highlighted point-of-contact row. Styles
+// are inline-only so Outlook / Word render them without a stylesheet.
+
+function escHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function nl2brHtml(s: string): string {
+  return escHtml(s).replace(/\r?\n/g, '<br>');
+}
+
+/**
+ * Build a shaded, rendered HTML table covering every named vendor on
+ * the workboard — designed to be written to the clipboard and pasted
+ * into an Outlook / Word / OneNote compose surface. Columns mirror the
+ * fields a security desk cares about (name, company, role/purpose,
+ * phone, email, visit date+time). Rows are zebra-striped; the point of
+ * contact is highlighted amber and tagged with a ★.
+ *
+ * Returns an HTML fragment (preamble paragraph + visit-context block +
+ * table + "requested by" line). Pair it with the plain-text body from
+ * `buildMultiVendorSecurityNotification` as the clipboard fallback.
+ */
+export function buildVendorTableHtml(
+  args: MultiVendorSecurityNotificationArgs,
+): string {
+  const namedVendors = args.vendors
+    .filter((v) => v.name.trim())
+    .filter((v, i, arr) => arr.findIndex((w) => w.id === v.id) === i);
+
+  const poc = namedVendors.find((v) => v.isPrimaryContact);
+  const ordered = poc
+    ? [poc, ...namedVendors.filter((v) => v.id !== poc.id)]
+    : namedVendors;
+
+  const parts: string[] = [];
+  const baseFont = 'font-family:Arial,Helvetica,sans-serif;font-size:13px';
+
+  if (args.preamble) {
+    parts.push(`<p style="${baseFont}">${nl2brHtml(args.preamble)}</p>`);
+  }
+
+  // Visit context — shown once above the table.
+  const ctx: string[] = [];
+  ctx.push(`<b>Project:</b> ${escHtml(args.project.name)}`);
+  if (args.project.location)
+    ctx.push(`<b>Location:</b> ${escHtml(args.project.location)}`);
+  if (args.project.workOrderId)
+    ctx.push(`<b>Work Order:</b> ${escHtml(args.project.workOrderId)}`);
+  parts.push(`<p style="${baseFont}">${ctx.join('<br>')}</p>`);
+
+  const headStyle =
+    'background:#1f4e79;color:#ffffff;text-align:left;padding:8px;border:1px solid #b9c6d6;font-size:12px';
+  const cellStyle =
+    'padding:8px;border:1px solid #d4dde8;font-size:13px;vertical-align:top';
+
+  const rows = ordered.map((v, i) => {
+    const isPoc = !!v.isPrimaryContact;
+    // Amber for the POC; otherwise zebra stripe light-blue / white.
+    const bg = isPoc ? '#fff4d6' : i % 2 === 0 ? '#eef3f8' : '#ffffff';
+    const nameCell = isPoc
+      ? `${escHtml(v.name)} &#9733; <span style="color:#8a6d00">(point of contact)</span>`
+      : escHtml(v.name);
+
+    const visitParts: string[] = [];
+    visitParts.push(v.visitDate ? formatDate(v.visitDate) : 'TBD');
+    if (v.visitTime) visitParts.push(v.visitTime);
+
+    const email = v.email
+      ? `<a href="mailto:${escHtml(v.email)}">${escHtml(v.email)}</a>`
+      : '';
+
+    return `<tr style="background:${bg}">
+      <td style="${cellStyle}"><b>${nameCell}</b></td>
+      <td style="${cellStyle}">${escHtml(v.company ?? '')}</td>
+      <td style="${cellStyle}">${escHtml(v.role ?? '')}</td>
+      <td style="${cellStyle}">${escHtml(v.phone ?? '')}</td>
+      <td style="${cellStyle}">${email}</td>
+      <td style="${cellStyle}">${escHtml(visitParts.join(', '))}</td>
+    </tr>`;
+  });
+
+  parts.push(
+    `<table border="1" cellspacing="0" cellpadding="8" style="border-collapse:collapse;${baseFont}">
+      <thead><tr>
+        <th style="${headStyle}">Name</th>
+        <th style="${headStyle}">Company</th>
+        <th style="${headStyle}">Role / purpose</th>
+        <th style="${headStyle}">Phone</th>
+        <th style="${headStyle}">Email</th>
+        <th style="${headStyle}">Visit</th>
+      </tr></thead>
+      <tbody>${rows.join('')}</tbody>
+    </table>`,
+  );
+
+  if (args.technicianName) {
+    parts.push(
+      `<p style="${baseFont}">Requested by: ${escHtml(args.technicianName)}</p>`,
+    );
+  }
+
+  return parts.join('\n');
+}
+
 export const DEFAULT_SECURITY_PREAMBLE =
   'Hi Security team — please prepare a visitor badge for the following vendor visit. Let me know if you need anything else from me.';
 

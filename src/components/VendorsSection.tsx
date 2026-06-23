@@ -4,10 +4,12 @@ import { useStore } from '../state/store';
 import {
   buildMultiVendorSecurityNotification,
   buildSecurityNotification,
+  buildVendorTableHtml,
   type MultiVendorSecurityNotificationArgs,
   type SecurityNotificationArgs,
 } from '../lib/security';
 import { isValidWorkOrderId } from '../lib/nuvolo';
+import { copyRichText } from '../lib/destinations';
 import VisitTimeSelect from './VisitTimeSelect';
 
 interface Props {
@@ -58,6 +60,21 @@ export default function VendorsSection({ project }: Props) {
    * for the "covering for someone else" case.
    */
   const [multiAlsoNuvolo, setMultiAlsoNuvolo] = useState(true);
+
+  /**
+   * "Group all vendors into one notification" — checked by default
+   * because the common case is multiple vendors arriving for the same
+   * job on the same day (even from different companies), which security
+   * would rather receive as a single notice than N separate emails.
+   * When on, tapping ANY vendor's individual "Notify security" sends
+   * the combined notice. When off, individual buttons send per-vendor
+   * emails — but `notifySecurity` still ASKS whether to combine, so the
+   * grouping never gets silently skipped when it was probably intended.
+   */
+  const [groupVendors, setGroupVendors] = useState(true);
+
+  /** Transient confirmation message for the "Copy as table" action. */
+  const [copyMsg, setCopyMsg] = useState('');
 
   const vendors = project.vendors ?? [];
   // Optional chaining + fallback — settings.securityEmail may be undefined
@@ -150,6 +167,29 @@ export default function VendorsSection({ project }: Props) {
       window.alert('Add the vendor name first.');
       return;
     }
+
+    // When there are 2+ named vendors, the common intent is one combined
+    // notice for the whole crew. If the "Group all vendors" box is checked
+    // we just do that. If it's unchecked we ASK — so grouping is never
+    // silently skipped when it was probably what the user wanted.
+    if (namedVendorCount >= 2) {
+      if (groupVendors) {
+        notifySecurityAllVendors(alsoPostToNuvolo);
+        return;
+      }
+      const combine = window.confirm(
+        `There are ${namedVendorCount} vendors on this workboard.\n\n` +
+          `If they're coming for the same job, you can send ONE combined ` +
+          `notification instead of separate emails.\n\n` +
+          `OK  →  send one combined notification for all ${namedVendorCount} vendors\n` +
+          `Cancel  →  notify only ${vendor.name}`,
+      );
+      if (combine) {
+        notifySecurityAllVendors(alsoPostToNuvolo);
+        return;
+      }
+    }
+
     const args: SecurityNotificationArgs = {
       vendor,
       project: {
@@ -201,6 +241,42 @@ export default function VendorsSection({ project }: Props) {
     };
     const mail = buildMultiVendorSecurityNotification(args);
     window.location.href = mail.href;
+  }
+
+  /**
+   * Copy a shaded, rendered HTML table of all named vendors to the
+   * clipboard so the user can paste it into the Outlook compose window
+   * (Ctrl+V) for a real, easy-to-scan table. mailto: bodies are plain
+   * text only, so this clipboard route is the way to land actual row
+   * shading / color in the email — same pattern the project export uses.
+   * The plain-text multi-vendor body is written as the fallback so the
+   * paste still does something useful in clients without HTML clipboard.
+   */
+  async function copyVendorTable() {
+    if (namedVendorCount === 0) {
+      window.alert('Add at least one vendor with a name first.');
+      return;
+    }
+    const args: MultiVendorSecurityNotificationArgs = {
+      vendors,
+      project: {
+        name: project.name,
+        workOrderId: project.workOrderId,
+        location: project.location,
+      },
+      securityEmail: settings.securityEmail ?? '',
+      preamble: settings.securityPreamble,
+      technicianName: settings.technicianName,
+    };
+    const html = buildVendorTableHtml(args);
+    const plain = buildMultiVendorSecurityNotification(args).body;
+    const ok = await copyRichText(html, plain);
+    setCopyMsg(
+      ok
+        ? 'Formatted table copied — paste (Ctrl+V) into the email body.'
+        : 'Copy failed — clipboard not available on this browser.',
+    );
+    window.setTimeout(() => setCopyMsg(''), 6000);
   }
 
   /**
@@ -358,32 +434,59 @@ export default function VendorsSection({ project }: Props) {
           whole crew" — so showing it for a single vendor would be
           redundant and confusing. */}
       {securityConfigured && namedVendorCount >= 2 && (
-        <div className="border-t pt-3 flex flex-wrap items-center justify-end gap-3">
-          {woValid && (
-            <label className="flex items-center gap-2 text-xs text-slate-600">
+        <div className="border-t pt-3 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <label
+              className="flex items-center gap-2 text-xs text-slate-700"
+              title="On (recommended for same-day visits): tapping any vendor's Notify Security sends ONE combined email covering everyone. Off: individual emails — but you'll be asked whether to combine."
+            >
               <input
                 type="checkbox"
-                checked={multiAlsoNuvolo}
-                onChange={(e) => setMultiAlsoNuvolo(e.target.checked)}
+                checked={groupVendors}
+                onChange={(e) => setGroupVendors(e.target.checked)}
                 className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
               />
-              Also post to Nuvolo ({project.workOrderId})
+              Group all vendors into one notification
             </label>
+            {woValid && (
+              <label className="flex items-center gap-2 text-xs text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={multiAlsoNuvolo}
+                  onChange={(e) => setMultiAlsoNuvolo(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                />
+                Also post to Nuvolo ({project.workOrderId})
+              </label>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <button
+              type="button"
+              className="btn-ghost text-sm"
+              onClick={copyVendorTable}
+              title="Copy a formatted, shaded table of all vendors. Paste it (Ctrl+V) into the email body — Outlook renders it as a real table with colored rows."
+            >
+              📋 Copy as table
+            </button>
+            <button
+              type="button"
+              className="btn-primary text-sm"
+              onClick={() =>
+                notifySecurityAllVendors(multiAlsoNuvolo && woValid)
+              }
+              title={
+                multiAlsoNuvolo && woValid
+                  ? `Open mail to security + Nuvolo (${project.workOrderId}) with one combined notice covering all ${namedVendorCount} vendors`
+                  : `Open mail with one combined notice covering all ${namedVendorCount} vendors`
+              }
+            >
+              🛡️ Notify security (all {namedVendorCount} vendors) →
+            </button>
+          </div>
+          {copyMsg && (
+            <p className="text-xs text-emerald-700 text-right">{copyMsg}</p>
           )}
-          <button
-            type="button"
-            className="btn-primary text-sm"
-            onClick={() =>
-              notifySecurityAllVendors(multiAlsoNuvolo && woValid)
-            }
-            title={
-              multiAlsoNuvolo && woValid
-                ? `Open mail to security + Nuvolo (${project.workOrderId}) with one combined notice covering all ${namedVendorCount} vendors`
-                : `Open mail with one combined notice covering all ${namedVendorCount} vendors`
-            }
-          >
-            🛡️ Notify security (all {namedVendorCount} vendors) →
-          </button>
         </div>
       )}
 
