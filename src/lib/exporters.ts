@@ -119,7 +119,7 @@ export function projectToMarkdown(project: Project): string {
 
   const vendors = project.vendors ?? [];
   if (vendors.length > 0) {
-    lines.push('## Vendors / contacts');
+    lines.push('## Visitors');
     for (const v of vendors) {
       const company = v.company ? ` — ${v.company}` : '';
       const role = v.role ? ` (${v.role})` : '';
@@ -266,7 +266,7 @@ export function projectToHtml(project: Project): string {
   // Vendors / contacts
   const vendors = project.vendors ?? [];
   if (vendors.length > 0) {
-    parts.push('<h2>Vendors / contacts</h2>');
+    parts.push('<h2>Visitors</h2>');
     const rows = vendors.map((v) => {
       const company = v.company ? esc(v.company) : '';
       const role = v.role ? esc(v.role) : '';
@@ -288,7 +288,7 @@ export function projectToHtml(project: Project): string {
     });
     parts.push(
       `<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse">
-        <thead><tr><th>Name</th><th>Company</th><th>Role</th><th>Phone</th><th>Email</th><th>Visit</th><th>Notes</th></tr></thead>
+        <thead><tr><th>Name</th><th>Vendor</th><th>Role</th><th>Phone</th><th>Email</th><th>Visit</th><th>Notes</th></tr></thead>
         <tbody>${rows.join('')}</tbody>
       </table>`,
     );

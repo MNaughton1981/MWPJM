@@ -646,6 +646,7 @@ export const useStore = create<AppState>()(
               // to capitalization or whitespace flow through.
               name: template.name.trim() || existing.name,
               company: template.company?.trim() || existing.company,
+              updatedAt: Date.now(),
             };
             resultId = existing.id;
             const next = s.savedVendors.slice();
@@ -663,6 +664,7 @@ export const useStore = create<AppState>()(
             ...(template.purposes && template.purposes.length
               ? { purposes: unionPurposes([], template.purposes) }
               : {}),
+            updatedAt: Date.now(),
           };
           resultId = created.id;
           return {
@@ -697,6 +699,7 @@ export const useStore = create<AppState>()(
               ...(template.email?.trim()
                 ? { email: template.email.trim() }
                 : {}),
+              updatedAt: Date.now(),
             };
             resultId = existing.id;
             const next = s.savedHosts.slice();
@@ -707,6 +710,7 @@ export const useStore = create<AppState>()(
             id: uid(),
             name,
             email: template.email?.trim() || undefined,
+            updatedAt: Date.now(),
           };
           resultId = created.id;
           return {
@@ -740,6 +744,7 @@ export const useStore = create<AppState>()(
             next[idx] = {
               ...existing,
               purposes: unionPurposes(existing.purposes, [p]),
+              updatedAt: Date.now(),
             };
             return { savedVendors: next };
           }
@@ -754,6 +759,7 @@ export const useStore = create<AppState>()(
             phone: contact.phone?.trim() || undefined,
             email: contact.email?.trim() || undefined,
             purposes: [p],
+            updatedAt: Date.now(),
           };
           return {
             savedVendors: [...s.savedVendors, created].sort((a, b) =>
@@ -781,6 +787,7 @@ export const useStore = create<AppState>()(
           next[idx] = {
             ...existing,
             purposes: remaining.length ? remaining : undefined,
+            updatedAt: Date.now(),
           };
           return { savedVendors: next };
         });

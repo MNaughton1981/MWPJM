@@ -40,7 +40,7 @@ const TOC_ITEMS: PageTOCItem[] = [
   { id: 'sec-photos', label: 'Photo naming pattern', icon: '🖼️' },
   { id: 'sec-sync', label: 'Sync state via OneDrive', icon: '🔄' },
   { id: 'sec-excel', label: 'Excel backend (new!)', icon: '📊' },
-  { id: 'sec-vendor-book', label: 'Vendor book', icon: '📒' },
+  { id: 'sec-vendor-book', label: 'Visitor book', icon: '📒' },
   { id: 'sec-host-book', label: 'Host book', icon: '🧑‍🔧' },
   { id: 'sec-vendor-events', label: 'Vendor events', icon: '📅' },
   { id: 'sec-backup', label: 'Manual backup', icon: '💾' },
@@ -166,7 +166,7 @@ export default function SettingsPage() {
       const ok = window.confirm(
         `Import ${data.projects.length} project(s)${
           data.savedVendors?.length
-            ? `, ${data.savedVendors.length} saved vendor(s)`
+            ? `, ${data.savedVendors.length} saved visitor(s)`
             : ''
         }${
           data.savedVendorEvents?.length
@@ -834,21 +834,21 @@ export default function SettingsPage() {
 
       <section id="sec-vendor-book" className="card p-4 space-y-3 scroll-mt-20">
         <div>
-          <h2 className="font-semibold">Vendor book</h2>
+          <h2 className="font-semibold">Visitor book</h2>
           <p className="text-xs text-slate-500 mt-1">
-            Vendors you've saved from a workboard via the{' '}
+            Visitors you've saved from a workboard via the{' '}
             <strong>💾 Save to book</strong> button. Picking one from
-            the "From book" dropdown when adding a vendor copies their
-            name, company, role, phone, email, and any general notes
-            into the new workboard vendor — visit-specific fields
-            (date, time, visit notes) stay blank for you to fill in.
-            Synced across devices alongside everything else.
+            the "From book" dropdown when adding a visitor copies their
+            name, vendor, role, phone, and email into the new workboard
+            visitor — visit-specific fields (dates, times, notes) stay
+            blank for you to fill in. Synced across devices alongside
+            everything else.
           </p>
         </div>
         {savedVendors.length === 0 ? (
           <p className="text-sm text-slate-500">
-            No saved vendors yet. The book auto-fills as you save
-            vendors from workboards.
+            No saved visitors yet. The book auto-fills as you save
+            visitors from workboards.
           </p>
         ) : (
           <ul className="divide-y divide-slate-200">
@@ -886,13 +886,13 @@ export default function SettingsPage() {
                       window.confirm(
                         `Remove "${sv.name}${
                           sv.company ? ' — ' + sv.company : ''
-                        }" from your vendor book?\n\nWorkboards that already use this vendor are unaffected — only the book entry is removed.`,
+                        }" from your visitor book?\n\nWorkboards that already use this visitor are unaffected — only the book entry is removed.`,
                       )
                     ) {
                       removeSavedVendor(sv.id);
                     }
                   }}
-                  title="Delete this entry from the vendor book. Existing workboard vendors using this entry's info are unaffected."
+                  title="Delete this entry from the visitor book. Existing workboard visitors using this entry's info are unaffected."
                 >
                   Remove
                 </button>
@@ -947,7 +947,7 @@ export default function SettingsPage() {
                       removeSavedHost(h.id);
                     }
                   }}
-                  title="Delete this entry from the host book. Existing vendors that name this host are unaffected."
+                  title="Delete this entry from the host book. Existing visitors that name this host are unaffected."
                 >
                   Remove
                 </button>

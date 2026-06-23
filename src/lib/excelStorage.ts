@@ -28,6 +28,7 @@ import type {
   Settings,
   SavedVendor,
   SavedVendorEvent,
+  SavedHost,
 } from '../types';
 import type { ImportedWorkOrders } from './workOrderCsv';
 import {
@@ -168,7 +169,9 @@ export async function createBlankWorkbook(): Promise<ExcelJS.Workbook> {
     { header: 'Notes', key: 'notes', width: 40 },
   ];
 
-  // Vendors sheet
+  // Vendors sheet. Flat per-visit fields (VisitDate / VisitTime) mirror
+  // the FIRST visit for back-compat and at-a-glance reading; the full
+  // multi-date schedule lives in the relational VendorVisits sheet.
   const vendors = workbook.addWorksheet('Vendors');
   vendors.columns = [
     { header: 'ID', key: 'id', width: 20 },
@@ -176,13 +179,28 @@ export async function createBlankWorkbook(): Promise<ExcelJS.Workbook> {
     { header: 'Name', key: 'name', width: 25 },
     { header: 'Company', key: 'company', width: 25 },
     { header: 'Role', key: 'role', width: 20 },
+    { header: 'Purpose', key: 'purpose', width: 22 },
     { header: 'Phone', key: 'phone', width: 18 },
     { header: 'Email', key: 'email', width: 25 },
+    { header: 'Host', key: 'host', width: 22 },
+    { header: 'HostEmail', key: 'hostEmail', width: 25 },
     { header: 'VisitDate', key: 'visitDate', width: 15 },
-    { header: 'VisitTime', key: 'visitTime', width: 12 },
+    { header: 'VisitTime', key: 'visitTime', width: 14 },
     { header: 'IsPrimaryContact', key: 'isPrimaryContact', width: 18 },
     { header: 'Notes', key: 'notes', width: 40 },
-    { header: 'BadgeOrFOBNeeded', key: 'badgeOrFOBNeeded', width: 18 },
+  ];
+
+  // VendorVisits sheet — relational, one row per scheduled visit, linked
+  // to a vendor by VendorID (+ ProjectID). Supports a vendor coming on
+  // several dates or across a run of consecutive days (Date → EndDate).
+  const vendorVisits = workbook.addWorksheet('VendorVisits');
+  vendorVisits.columns = [
+    { header: 'ID', key: 'id', width: 20 },
+    { header: 'ProjectID', key: 'projectID', width: 20 },
+    { header: 'VendorID', key: 'vendorID', width: 20 },
+    { header: 'Date', key: 'date', width: 15 },
+    { header: 'EndDate', key: 'endDate', width: 15 },
+    { header: 'Time', key: 'time', width: 22 },
   ];
 
   // Photos sheet
@@ -233,6 +251,18 @@ export async function createBlankWorkbook(): Promise<ExcelJS.Workbook> {
     { header: 'Phone', key: 'phone', width: 18 },
     { header: 'Email', key: 'email', width: 25 },
     { header: 'GeneralNotes', key: 'generalNotes', width: 40 },
+    // Recurring on-site purposes, joined with "; " (e.g. "Quarterly PM; Leak repair").
+    { header: 'Purposes', key: 'purposes', width: 40 },
+    { header: 'UpdatedAt', key: 'updatedAt', width: 15 },
+  ];
+
+  // SavedHosts sheet — the host book (co-workers named as on-site host).
+  const savedHosts = workbook.addWorksheet('SavedHosts');
+  savedHosts.columns = [
+    { header: 'ID', key: 'id', width: 20 },
+    { header: 'Name', key: 'name', width: 25 },
+    { header: 'Email', key: 'email', width: 25 },
+    { header: 'UpdatedAt', key: 'updatedAt', width: 15 },
   ];
 
   // SavedVendorEvents sheet
@@ -450,5 +480,9 @@ export async function getSavedVendors(): Promise<SavedVendor[]> {
 }
 
 export async function getSavedVendorEvents(): Promise<SavedVendorEvent[]> {
+  return [];
+}
+
+export async function getSavedHosts(): Promise<SavedHost[]> {
   return [];
 }

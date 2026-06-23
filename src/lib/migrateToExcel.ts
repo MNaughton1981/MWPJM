@@ -19,6 +19,7 @@ import {
   EXCEL_FILENAME,
 } from './excelStorage';
 import { readFileFromFolder } from './folderConnection';
+import { getVendorVisits } from './visits';
 
 export interface MigrationResult {
   success: boolean;
@@ -114,25 +115,49 @@ export async function migrateToExcel(): Promise<MigrationResult> {
         }
       }
 
-      // ========== Vendors ==========
+      // ========== Vendors + VendorVisits ==========
       const vendorsSheet = workbook.getWorksheet('Vendors');
+      const vendorVisitsSheet = workbook.getWorksheet('VendorVisits');
       if (vendorsSheet) {
         for (const vendor of project.vendors || []) {
+          // Full visit schedule (stored visits, or a single derived entry
+          // from the legacy visitDate/visitTime for older vendors).
+          const visits = getVendorVisits(vendor);
+          const first = visits[0];
           vendorsSheet.addRow({
             id: vendor.id,
             projectID: project.id,
             name: vendor.name,
             company: vendor.company || '',
             role: vendor.role || '',
+            purpose: vendor.purpose || '',
             phone: vendor.phone || '',
             email: vendor.email || '',
-            visitDate: vendor.visitDate || '',
-            visitTime: vendor.visitTime || '',
+            host: vendor.host || '',
+            hostEmail: vendor.hostEmail || '',
+            // Flat fields mirror the first visit for at-a-glance reading.
+            visitDate: first?.date || vendor.visitDate || '',
+            visitTime: first?.time || vendor.visitTime || '',
             isPrimaryContact: vendor.isPrimaryContact || false,
             notes: vendor.notes || '',
-            badgeOrFOBNeeded: false, // Field doesn't exist yet in type
           });
           vendorsCount++;
+
+          // Relational visit rows — the authoritative multi-date schedule.
+          if (vendorVisitsSheet) {
+            visits.forEach((v, i) => {
+              const visitId =
+                v.id && v.id !== 'legacy' ? v.id : `${vendor.id}-v${i + 1}`;
+              vendorVisitsSheet.addRow({
+                id: visitId,
+                projectID: project.id,
+                vendorID: vendor.id,
+                date: v.date || '',
+                endDate: v.endDate || '',
+                time: v.time || '',
+              });
+            });
+          }
         }
       }
 
@@ -219,6 +244,21 @@ export async function migrateToExcel(): Promise<MigrationResult> {
           phone: vendor.phone || '',
           email: vendor.email || '',
           generalNotes: vendor.generalNotes || '',
+          purposes: (vendor.purposes ?? []).join('; '),
+          updatedAt: vendor.updatedAt ?? '',
+        });
+      }
+    }
+
+    // ========== SavedHosts ==========
+    const savedHostsSheet = workbook.getWorksheet('SavedHosts');
+    if (savedHostsSheet) {
+      for (const host of state.savedHosts) {
+        savedHostsSheet.addRow({
+          id: host.id,
+          name: host.name,
+          email: host.email || '',
+          updatedAt: host.updatedAt ?? '',
         });
       }
     }
