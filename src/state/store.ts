@@ -330,6 +330,18 @@ interface AppState {
     savedHosts?: SavedHost[];
     syncedAt: string;
   }) => void;
+  /**
+   * Apply the result of a two-way Excel reconcile. Replaces only the
+   * reconciled slices (projects + the global books) with the already-
+   * merged arrays; settings, workOrders, and composer drafts are left
+   * untouched (device-specific / not reconciled via Excel).
+   */
+  applyReconciledState: (data: {
+    projects: Project[];
+    savedVendors: SavedVendor[];
+    savedVendorEvents: SavedVendorEvent[];
+    savedHosts: SavedHost[];
+  }) => void;
 }
 
 const defaultSettings: Settings = {
@@ -874,6 +886,14 @@ export const useStore = create<AppState>()(
           savedHosts: data.savedHosts ?? [],
           lastSyncedAt: data.syncedAt,
           syncError: null,
+        })),
+
+      applyReconciledState: (data) =>
+        set(() => ({
+          projects: data.projects,
+          savedVendors: data.savedVendors,
+          savedVendorEvents: data.savedVendorEvents,
+          savedHosts: data.savedHosts,
         })),
 
       mergeSyncedState: (data) =>
