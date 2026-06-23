@@ -171,6 +171,7 @@ export function buildVendorTableHtml(
       <td style="${cellStyle}"><b>${nameCell}</b></td>
       <td style="${cellStyle}">${escHtml(v.company ?? '')}</td>
       <td style="${cellStyle}">${escHtml(v.role ?? '')}</td>
+      <td style="${cellStyle}">${escHtml(v.purpose ?? '')}</td>
       <td style="${cellStyle}">${escHtml(v.phone ?? '')}</td>
       <td style="${cellStyle}">${email}</td>
       <td style="${cellStyle}">${escHtml(host)}</td>
@@ -183,7 +184,8 @@ export function buildVendorTableHtml(
       <thead><tr>
         <th style="${headStyle}">Name</th>
         <th style="${headStyle}">Company</th>
-        <th style="${headStyle}">Role / purpose</th>
+        <th style="${headStyle}">Role / trade</th>
+        <th style="${headStyle}">Purpose</th>
         <th style="${headStyle}">Phone</th>
         <th style="${headStyle}">Email</th>
         <th style="${headStyle}">Host</th>
@@ -252,6 +254,7 @@ function renderVendorBlock(
   lines.push(nameLine);
   if (vendor.company) lines.push(`${pad('Company')}: ${vendor.company}`);
   if (vendor.role) lines.push(`${pad('Role')}: ${vendor.role}`);
+  if (vendor.purpose) lines.push(`${pad('Purpose')}: ${vendor.purpose}`);
   if (vendor.phone) lines.push(`${pad('Phone')}: ${vendor.phone}`);
   if (vendor.email) lines.push(`${pad('Email')}: ${vendor.email}`);
 

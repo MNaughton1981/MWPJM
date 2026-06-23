@@ -52,6 +52,8 @@ export default function VendorsSection({ project }: Props) {
   const setPrimaryVendorContact = useStore((s) => s.setPrimaryVendorContact);
   const savedVendors = useStore((s) => s.savedVendors);
   const addOrUpdateSavedVendor = useStore((s) => s.addOrUpdateSavedVendor);
+  const addSavedVendorPurpose = useStore((s) => s.addSavedVendorPurpose);
+  const removeSavedVendorPurpose = useStore((s) => s.removeSavedVendorPurpose);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerFilter, setPickerFilter] = useState('');
   /**
@@ -443,6 +445,22 @@ export default function VendorsSection({ project }: Props) {
                 })
               }
               isInBook={isVendorInBook(v, savedVendors)}
+              savedPurposes={findSavedVendor(v, savedVendors)?.purposes ?? []}
+              onSavePurpose={(purpose) =>
+                addSavedVendorPurpose(
+                  {
+                    name: v.name,
+                    company: v.company,
+                    role: v.role,
+                    phone: v.phone,
+                    email: v.email,
+                  },
+                  purpose,
+                )
+              }
+              onRemovePurpose={(purpose) =>
+                removeSavedVendorPurpose(v.name, v.company, purpose)
+              }
               securityConfigured={securityConfigured}
               hasValidWorkOrder={woValid}
               workOrderId={project.workOrderId}
@@ -539,6 +557,23 @@ function isVendorInBook(v: Vendor, book: SavedVendor[]): boolean {
   return book.some((sv) => key(sv.name, sv.company) === k);
 }
 
+/**
+ * Find the saved-book entry matching a workboard vendor by the same
+ * name+company key the store uses. Returns undefined when the vendor
+ * isn't in the book yet. Used to surface that vendor's saved purposes
+ * as a dropdown in the Purpose field.
+ */
+function findSavedVendor(
+  v: Vendor,
+  book: SavedVendor[],
+): SavedVendor | undefined {
+  if (!v.name.trim()) return undefined;
+  const key = (n: string | undefined, c: string | undefined): string =>
+    `${(n || '').trim().toLowerCase()}|${(c || '').trim().toLowerCase()}`;
+  const k = key(v.name, v.company);
+  return book.find((sv) => key(sv.name, sv.company) === k);
+}
+
 function VendorCard({
   vendor,
   onChange,
@@ -547,6 +582,9 @@ function VendorCard({
   onNotifySecurity,
   onSaveToBook,
   isInBook,
+  savedPurposes,
+  onSavePurpose,
+  onRemovePurpose,
   securityConfigured,
   hasValidWorkOrder,
   workOrderId,
@@ -559,6 +597,9 @@ function VendorCard({
   onNotifySecurity: (alsoPostToNuvolo: boolean) => void;
   onSaveToBook: () => void;
   isInBook: boolean;
+  savedPurposes: string[];
+  onSavePurpose: (purpose: string) => void;
+  onRemovePurpose: (purpose: string) => void;
   securityConfigured: boolean;
   hasValidWorkOrder: boolean;
   workOrderId?: string;
@@ -606,6 +647,17 @@ function VendorCard({
   function removeVisit(idx: number) {
     commitVisits(visitRows.filter((_, i) => i !== idx));
   }
+
+  // ── Purpose of visit ────────────────────────────────────────────
+  const purposeVal = (vendor.purpose ?? '').trim();
+  // Can only save a purpose to the book when we have both a vendor name
+  // (the book is keyed by name+company) and a non-empty purpose.
+  const canSavePurpose = !!purposeVal && !!vendor.name.trim();
+  const purposeSaved =
+    canSavePurpose &&
+    savedPurposes.some(
+      (p) => p.trim().toLowerCase() === purposeVal.toLowerCase(),
+    );
 
   return (
     <li
@@ -712,6 +764,53 @@ function VendorCard({
             title="Who the vendor is here to see. Security preps the visitor badge under this person and notifies them when the vendor signs in. Leave blank to use your own name; name a co-worker when they’re the point person that day (e.g. you’re on vacation)."
           />
         </div>
+      </div>
+
+      <div>
+        <label className="label">Purpose of visit</label>
+        <input
+          className="input"
+          list={`purposes-${vendor.id}`}
+          placeholder="e.g. Quarterly PM, Leak repair, Install"
+          value={vendor.purpose ?? ''}
+          onChange={(e) => onChange({ purpose: e.target.value })}
+          title="Why the vendor is on-site this time. Pick a saved purpose from the dropdown or type a new one."
+        />
+        {savedPurposes.length > 0 && (
+          <datalist id={`purposes-${vendor.id}`}>
+            {savedPurposes.map((p) => (
+              <option key={p} value={p} />
+            ))}
+          </datalist>
+        )}
+        <label
+          className={`flex items-center gap-2 text-xs mt-1 ${
+            canSavePurpose
+              ? 'text-slate-600'
+              : 'text-slate-400 cursor-not-allowed'
+          }`}
+          title={
+            !vendor.name.trim()
+              ? 'Add the vendor name first — the book is keyed by vendor.'
+              : !purposeVal
+              ? 'Type a purpose first.'
+              : purposeSaved
+              ? 'This purpose is saved to the vendor’s book. Uncheck to remove it.'
+              : 'Save this purpose to the vendor’s book so you can pick it from the dropdown next time.'
+          }
+        >
+          <input
+            type="checkbox"
+            disabled={!canSavePurpose}
+            checked={purposeSaved}
+            onChange={(e) => {
+              if (e.target.checked) onSavePurpose(purposeVal);
+              else onRemovePurpose(purposeVal);
+            }}
+            className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 disabled:opacity-50"
+          />
+          Save purpose to book
+        </label>
       </div>
 
       <div>

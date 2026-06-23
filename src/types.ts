@@ -90,6 +90,18 @@ export interface Vendor {
    * also the host. Set it explicitly only when someone else is covering.
    */
   host?: string;
+  /**
+   * Purpose of this on-site visit — why the vendor is here this time
+   * (e.g. "Quarterly PM", "Leak repair", "Install"). Distinct from
+   * `role` (their trade, e.g. Plumber). Surfaces in the security
+   * notification so the desk knows what the visit is for.
+   *
+   * Can be pulled from the vendor's saved `purposes` in the book via a
+   * dropdown, or typed fresh. Saving it back to the book is opt-in (a
+   * checkbox on the vendor card) so the list of recurring purposes
+   * builds up per vendor without anything defaulting automatically.
+   */
+  purpose?: string;
   visitDate?: string; // ISO date (YYYY-MM-DD)
   /**
    * Free-form visit time hint, surfaced in the security notification
@@ -172,6 +184,16 @@ export interface SavedVendor {
    * details on top.
    */
   generalNotes?: string;
+  /**
+   * Recurring on-site purposes saved for this vendor — e.g.
+   * ["Quarterly PM", "Annual inspection", "Leak repair"]. Built up
+   * opt-in via the "Save purpose to book" checkbox on a workboard
+   * vendor card. When this vendor is added to a workboard, these are
+   * offered as a dropdown in the Purpose field so the user can pick a
+   * known purpose instead of retyping it. Older book entries predate
+   * this field; treat missing as an empty list.
+   */
+  purposes?: string[];
 }
 
 /**
