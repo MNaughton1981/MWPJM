@@ -1,4 +1,4 @@
-import type { AppData, Project, SavedVendor, SavedVendorEvent, Settings } from '../types';
+import type { AppData, Project, SavedVendor, SavedVendorEvent, SavedHost, Settings } from '../types';
 import type { WorkOrder } from './workOrderCsv';
 import {
   PROJECT_STATUS_LABELS,
@@ -12,6 +12,7 @@ export function buildAppData(
   settings: Settings,
   savedVendors: SavedVendor[] = [],
   savedVendorEvents: SavedVendorEvent[] = [],
+  savedHosts: SavedHost[] = [],
 ): AppData {
   return {
     version: 1,
@@ -20,6 +21,7 @@ export function buildAppData(
     settings,
     savedVendors,
     savedVendorEvents,
+    savedHosts,
   };
 }
 

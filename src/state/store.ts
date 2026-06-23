@@ -8,6 +8,7 @@ import type {
   ProjectStatus,
   SavedVendor,
   SavedVendorEvent,
+  SavedHost,
   Settings,
   Trade,
   Vendor,
@@ -77,6 +78,15 @@ interface AppState {
    * saving on desktop = available on mobile.
    */
   savedVendors: SavedVendor[];
+
+  /**
+   * The user's persistent host "book" — co-workers they name as the
+   * on-site visit host on a vendor. Auto-populated via "Save host to
+   * book" on a vendor card, and surfaced as a dropdown on the Host
+   * field so their name + email can be pulled in without re-typing.
+   * Synced across devices alongside everything else.
+   */
+  savedHosts: SavedHost[];
 
   /**
    * Saved recurring service / vendor event templates — quarterly
@@ -201,6 +211,14 @@ interface AppState {
   /** Delete a saved vendor from the book by id. */
   removeSavedVendor: (id: string) => void;
   /**
+   * Add or update a saved host in the host book, keyed by lowercased,
+   * trimmed name. A non-empty incoming email overwrites the stored one;
+   * a blank email leaves the existing value intact. Returns the entry id.
+   */
+  addOrUpdateSavedHost: (template: Omit<SavedHost, 'id'>) => string;
+  /** Delete a saved host from the host book by id. */
+  removeSavedHost: (id: string) => void;
+  /**
    * Append an on-site purpose to a vendor's book entry, finding it by
    * (name, company) or creating the entry from the supplied contact
    * info if it doesn't exist yet. Deduped case-insensitively. No-op for
@@ -267,6 +285,7 @@ interface AppState {
     settings: Settings;
     savedVendors?: SavedVendor[];
     savedVendorEvents?: SavedVendorEvent[];
+    savedHosts?: SavedHost[];
   }) => void;
 
   /**
@@ -283,6 +302,7 @@ interface AppState {
     workOrders: ImportedWorkOrders | null;
     savedVendors?: SavedVendor[];
     savedVendorEvents?: SavedVendorEvent[];
+    savedHosts?: SavedHost[];
     syncedAt: string;
   }) => void;
 
@@ -307,6 +327,7 @@ interface AppState {
     workOrders: ImportedWorkOrders | null;
     savedVendors?: SavedVendor[];
     savedVendorEvents?: SavedVendorEvent[];
+    savedHosts?: SavedHost[];
     syncedAt: string;
   }) => void;
 }
@@ -348,6 +369,7 @@ export const useStore = create<AppState>()(
       syncError: null,
       savedVendors: [],
       savedVendorEvents: [],
+      savedHosts: [],
       composerDrafts: {},
 
       addProject: (p) =>
@@ -657,6 +679,50 @@ export const useStore = create<AppState>()(
           savedVendors: s.savedVendors.filter((sv) => sv.id !== id),
         })),
 
+      addOrUpdateSavedHost: (template) => {
+        const name = template.name.trim();
+        let resultId = '';
+        if (!name) return resultId;
+        const nameKey = name.toLowerCase();
+        set((s) => {
+          const idx = s.savedHosts.findIndex(
+            (h) => h.name.trim().toLowerCase() === nameKey,
+          );
+          if (idx >= 0) {
+            const existing = s.savedHosts[idx];
+            const merged: SavedHost = {
+              ...existing,
+              name, // re-canonicalize casing/whitespace
+              // Non-empty incoming email overwrites; blank keeps existing.
+              ...(template.email?.trim()
+                ? { email: template.email.trim() }
+                : {}),
+            };
+            resultId = existing.id;
+            const next = s.savedHosts.slice();
+            next[idx] = merged;
+            return { savedHosts: next };
+          }
+          const created: SavedHost = {
+            id: uid(),
+            name,
+            email: template.email?.trim() || undefined,
+          };
+          resultId = created.id;
+          return {
+            savedHosts: [...s.savedHosts, created].sort((a, b) =>
+              a.name.localeCompare(b.name),
+            ),
+          };
+        });
+        return resultId;
+      },
+
+      removeSavedHost: (id) =>
+        set((s) => ({
+          savedHosts: s.savedHosts.filter((h) => h.id !== id),
+        })),
+
       addSavedVendorPurpose: (contact, purpose) => {
         const p = purpose.trim();
         if (!p) return;
@@ -788,6 +854,7 @@ export const useStore = create<AppState>()(
           settings: { ...defaultSettings, ...data.settings },
           savedVendors: data.savedVendors ?? [],
           savedVendorEvents: data.savedVendorEvents ?? [],
+          savedHosts: data.savedHosts ?? [],
         })),
 
       applySyncedState: (data) =>
@@ -797,6 +864,7 @@ export const useStore = create<AppState>()(
           workOrders: data.workOrders,
           savedVendors: data.savedVendors ?? [],
           savedVendorEvents: data.savedVendorEvents ?? [],
+          savedHosts: data.savedHosts ?? [],
           lastSyncedAt: data.syncedAt,
           syncError: null,
         })),
@@ -827,6 +895,10 @@ export const useStore = create<AppState>()(
           const vendorById = new Map(s.savedVendors.map((v) => [v.id, v]));
           for (const v of data.savedVendors ?? []) vendorById.set(v.id, v);
 
+          // Saved hosts: union by id (incoming wins on conflict).
+          const hostById = new Map(s.savedHosts.map((h) => [h.id, h]));
+          for (const h of data.savedHosts ?? []) hostById.set(h.id, h);
+
           // Saved events: union by id, newer updatedAt wins.
           const eventById = new Map(
             s.savedVendorEvents.map((e) => [e.id, e]),
@@ -851,6 +923,7 @@ export const useStore = create<AppState>()(
             projects: [...incomingOnly, ...merged],
             savedVendors: Array.from(vendorById.values()),
             savedVendorEvents: Array.from(eventById.values()),
+            savedHosts: Array.from(hostById.values()),
             workOrders,
             lastSyncedAt: data.syncedAt,
             syncError: null,
@@ -902,6 +975,10 @@ export const useStore = create<AppState>()(
           // backfill addSavedVendorEvent would spread into undefined.
           savedVendorEvents:
             p.savedVendorEvents ?? current.savedVendorEvents,
+          // Same defensive backfill for savedHosts (host book) — older
+          // persisted states predate it, so without this addOrUpdate-
+          // SavedHost would crash on `s.savedHosts.findIndex`.
+          savedHosts: p.savedHosts ?? current.savedHosts,
         };
       },
     },

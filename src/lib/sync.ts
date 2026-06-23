@@ -24,7 +24,13 @@ import {
   readFileFromFolder,
   writeFileToFolder,
 } from './folderConnection';
-import type { Project, SavedVendor, SavedVendorEvent, Settings } from '../types';
+import type {
+  Project,
+  SavedVendor,
+  SavedVendorEvent,
+  SavedHost,
+  Settings,
+} from '../types';
 import type { ImportedWorkOrders } from './workOrderCsv';
 
 export const DEFAULT_SYNC_FILENAME = 'mwpjm-state.json';
@@ -55,6 +61,11 @@ export interface SyncPayload {
    * feature existed.
    */
   savedVendorEvents?: SavedVendorEvent[];
+  /**
+   * The user's host "book". Optional for backwards-compat with
+   * snapshots written before the host book existed.
+   */
+  savedHosts?: SavedHost[];
 }
 
 function buildPayload(): SyncPayload {
@@ -67,6 +78,7 @@ function buildPayload(): SyncPayload {
     workOrders: state.workOrders,
     savedVendors: state.savedVendors,
     savedVendorEvents: state.savedVendorEvents,
+    savedHosts: state.savedHosts,
   };
 }
 
@@ -102,6 +114,7 @@ export function parseSyncPayload(text: string): SyncPayload {
     savedVendorEvents: Array.isArray(p.savedVendorEvents)
       ? p.savedVendorEvents
       : [],
+    savedHosts: Array.isArray(p.savedHosts) ? p.savedHosts : [],
   };
 }
 
@@ -167,6 +180,7 @@ export function applySyncedState(payload: SyncPayload): void {
     workOrders: payload.workOrders,
     savedVendors: payload.savedVendors ?? [],
     savedVendorEvents: payload.savedVendorEvents ?? [],
+    savedHosts: payload.savedHosts ?? [],
     syncedAt: payload.syncedAt,
   });
 }
@@ -212,6 +226,7 @@ export function applyMergedState(payload: SyncPayload): MergeSummary {
     workOrders: payload.workOrders,
     savedVendors: payload.savedVendors ?? [],
     savedVendorEvents: payload.savedVendorEvents ?? [],
+    savedHosts: payload.savedHosts ?? [],
     syncedAt: payload.syncedAt,
   });
 

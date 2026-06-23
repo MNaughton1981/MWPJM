@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { Project, SavedVendor, Vendor, VendorVisit } from '../types';
+import type { Project, SavedVendor, SavedHost, Vendor, VendorVisit } from '../types';
 import { useStore } from '../state/store';
 import {
   buildMultiVendorSecurityNotification,
@@ -54,6 +54,9 @@ export default function VendorsSection({ project }: Props) {
   const addOrUpdateSavedVendor = useStore((s) => s.addOrUpdateSavedVendor);
   const addSavedVendorPurpose = useStore((s) => s.addSavedVendorPurpose);
   const removeSavedVendorPurpose = useStore((s) => s.removeSavedVendorPurpose);
+  const savedHosts = useStore((s) => s.savedHosts);
+  const addOrUpdateSavedHost = useStore((s) => s.addOrUpdateSavedHost);
+  const removeSavedHost = useStore((s) => s.removeSavedHost);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerFilter, setPickerFilter] = useState('');
   /**
@@ -77,7 +80,16 @@ export default function VendorsSection({ project }: Props) {
    */
   const [groupVendors, setGroupVendors] = useState(true);
 
-  /** Transient confirmation message for the "Copy as table" action. */
+  /**
+   * "Format as table" — when on, the multi-vendor "Notify security"
+   * also copies the shaded HTML table to the clipboard so the user can
+   * paste it into the email that opens. Off by default; the plain-text
+   * body is always sent regardless, so an unsupported clipboard just
+   * means resend with this unchecked.
+   */
+  const [formatAsTable, setFormatAsTable] = useState(false);
+
+  /** Transient status message for the table-copy / notify actions. */
   const [copyMsg, setCopyMsg] = useState('');
 
   const vendors = project.vendors ?? [];
@@ -210,7 +222,16 @@ export default function VendorsSection({ project }: Props) {
       // is handled inside buildSecurityNotification — if the POC is
       // the same vendor we're notifying about, or has the same
       // email as the user, the address won't appear twice.
-      ccEmails: [poc?.email],
+      // Also CC the host's email when the host isn't the sender (e.g.
+      // a co-worker covering), so they're looped in on the visit.
+      ccEmails: [
+        poc?.email,
+        vendor.hostEmail?.trim() &&
+        vendor.hostEmail.trim().toLowerCase() !==
+          (settings.userEmail ?? '').trim().toLowerCase()
+          ? vendor.hostEmail.trim()
+          : undefined,
+      ],
       preamble: settings.securityPreamble,
       technicianName: settings.technicianName,
       alsoPostToNuvolo,
@@ -225,7 +246,7 @@ export default function VendorsSection({ project }: Props) {
    * covering every named vendor on the workboard. Same CC logic as
    * the per-vendor flow (user email + POC email, deduped).
    */
-  function notifySecurityAllVendors(alsoPostToNuvolo: boolean) {
+  async function notifySecurityAllVendors(alsoPostToNuvolo: boolean) {
     if (!securityConfigured) return;
     if (namedVendorCount === 0) {
       window.alert('Add at least one vendor with a name first.');
@@ -247,43 +268,22 @@ export default function VendorsSection({ project }: Props) {
       nuvoloEmail: settings.nuvoloEmail,
     };
     const mail = buildMultiVendorSecurityNotification(args);
-    window.location.href = mail.href;
-  }
-
-  /**
-   * Copy a shaded, rendered HTML table of all named vendors to the
-   * clipboard so the user can paste it into the Outlook compose window
-   * (Ctrl+V) for a real, easy-to-scan table. mailto: bodies are plain
-   * text only, so this clipboard route is the way to land actual row
-   * shading / color in the email — same pattern the project export uses.
-   * The plain-text multi-vendor body is written as the fallback so the
-   * paste still does something useful in clients without HTML clipboard.
-   */
-  async function copyVendorTable() {
-    if (namedVendorCount === 0) {
-      window.alert('Add at least one vendor with a name first.');
-      return;
+    // When "Format as table" is on, copy the shaded HTML table to the
+    // clipboard FIRST (still inside the click gesture) so the user can
+    // paste it (Ctrl+V) into the email that's about to open. The mailto
+    // always carries the plain-text body, so a browser without HTML
+    // clipboard support just means "resend with the box unchecked".
+    if (formatAsTable) {
+      const html = buildVendorTableHtml(args);
+      const ok = await copyRichText(html, mail.body);
+      setCopyMsg(
+        ok
+          ? 'Table copied — in the email that opens, press Ctrl+V to paste it in.'
+          : 'This browser can’t copy the table — sending plain text. Resend with “Format as table” unchecked.',
+      );
+      window.setTimeout(() => setCopyMsg(''), 8000);
     }
-    const args: MultiVendorSecurityNotificationArgs = {
-      vendors,
-      project: {
-        name: project.name,
-        workOrderId: project.workOrderId,
-        location: project.location,
-      },
-      securityEmail: settings.securityEmail ?? '',
-      preamble: settings.securityPreamble,
-      technicianName: settings.technicianName,
-    };
-    const html = buildVendorTableHtml(args);
-    const plain = buildMultiVendorSecurityNotification(args).body;
-    const ok = await copyRichText(html, plain);
-    setCopyMsg(
-      ok
-        ? 'Formatted table copied — paste (Ctrl+V) into the email body.'
-        : 'Copy failed — clipboard not available on this browser.',
-    );
-    window.setTimeout(() => setCopyMsg(''), 6000);
+    window.location.href = mail.href;
   }
 
   /**
@@ -447,6 +447,17 @@ export default function VendorsSection({ project }: Props) {
               onRemovePurpose={(purpose) =>
                 removeSavedVendorPurpose(v.name, v.company, purpose)
               }
+              savedHosts={savedHosts}
+              onSaveHost={(name, email) =>
+                addOrUpdateSavedHost({ name, email })
+              }
+              onRemoveHost={(name) => {
+                const match = savedHosts.find(
+                  (h) =>
+                    h.name.trim().toLowerCase() === name.trim().toLowerCase(),
+                );
+                if (match) removeSavedHost(match.id);
+              }}
               securityConfigured={securityConfigured}
               hasValidWorkOrder={woValid}
               workOrderId={project.workOrderId}
@@ -476,6 +487,18 @@ export default function VendorsSection({ project }: Props) {
               />
               Group all vendors into one notification
             </label>
+            <label
+              className="flex items-center gap-2 text-xs text-slate-700"
+              title="When checked, Notify Security also copies a shaded vendor table to your clipboard — paste it (Ctrl+V) into the email that opens. If your browser can't copy it, the email still sends as plain text; just resend with this unchecked."
+            >
+              <input
+                type="checkbox"
+                checked={formatAsTable}
+                onChange={(e) => setFormatAsTable(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+              />
+              Format as table (copies it to paste)
+            </label>
             {woValid && (
               <label className="flex items-center gap-2 text-xs text-slate-600">
                 <input
@@ -491,20 +514,14 @@ export default function VendorsSection({ project }: Props) {
           <div className="flex flex-wrap items-center justify-end gap-3">
             <button
               type="button"
-              className="btn-ghost text-sm"
-              onClick={copyVendorTable}
-              title="Copy a formatted, shaded table of all vendors. Paste it (Ctrl+V) into the email body — Outlook renders it as a real table with colored rows."
-            >
-              📋 Copy as table
-            </button>
-            <button
-              type="button"
               className="btn-primary text-sm"
               onClick={() =>
-                notifySecurityAllVendors(multiAlsoNuvolo && woValid)
+                void notifySecurityAllVendors(multiAlsoNuvolo && woValid)
               }
               title={
-                multiAlsoNuvolo && woValid
+                formatAsTable
+                  ? `Copies the vendor table, then opens mail with one combined notice for all ${namedVendorCount} vendors — paste the table in with Ctrl+V`
+                  : multiAlsoNuvolo && woValid
                   ? `Open mail to security + Nuvolo (${project.workOrderId}) with one combined notice covering all ${namedVendorCount} vendors`
                   : `Open mail with one combined notice covering all ${namedVendorCount} vendors`
               }
@@ -571,6 +588,9 @@ function VendorCard({
   savedPurposes,
   onSavePurpose,
   onRemovePurpose,
+  savedHosts,
+  onSaveHost,
+  onRemoveHost,
   securityConfigured,
   hasValidWorkOrder,
   workOrderId,
@@ -586,6 +606,9 @@ function VendorCard({
   savedPurposes: string[];
   onSavePurpose: (purpose: string) => void;
   onRemovePurpose: (purpose: string) => void;
+  savedHosts: SavedHost[];
+  onSaveHost: (name: string, email?: string) => void;
+  onRemoveHost: (name: string) => void;
   securityConfigured: boolean;
   hasValidWorkOrder: boolean;
   workOrderId?: string;
@@ -643,6 +666,14 @@ function VendorCard({
     canSavePurpose &&
     savedPurposes.some(
       (p) => p.trim().toLowerCase() === purposeVal.toLowerCase(),
+    );
+
+  // ── Host book ────────────────────────────────────────────────────
+  const hostVal = (vendor.host ?? '').trim();
+  const hostInBook =
+    !!hostVal &&
+    savedHosts.some(
+      (h) => h.name.trim().toLowerCase() === hostVal.toLowerCase(),
     );
 
   return (
@@ -740,15 +771,77 @@ function VendorCard({
           <label className="label">Host</label>
           <input
             className="input"
+            list={`hosts-${vendor.id}`}
             placeholder={
               technicianName
                 ? `${technicianName} (you, default)`
                 : 'Who they’re here to see'
             }
             value={vendor.host ?? ''}
-            onChange={(e) => onChange({ host: e.target.value })}
-            title="Who the vendor is here to see. Security preps the visitor badge under this person and notifies them when the vendor signs in. Leave blank to use your own name; name a co-worker when they’re the point person that day (e.g. you’re on vacation)."
+            onChange={(e) => {
+              const name = e.target.value;
+              // If the typed/picked name matches a saved host with an
+              // email, pull their email in automatically.
+              const match = savedHosts.find(
+                (h) =>
+                  h.name.trim().toLowerCase() === name.trim().toLowerCase(),
+              );
+              onChange(
+                match?.email
+                  ? { host: name, hostEmail: match.email }
+                  : { host: name },
+              );
+            }}
+            title="Who the vendor is here to see. Security preps the visitor badge under this person and notifies them when the vendor signs in. Leave blank to use your own name; name a co-worker when they’re the point person that day (e.g. you’re on vacation). Pick a saved host from the dropdown to pull their email in."
           />
+          {savedHosts.length > 0 && (
+            <datalist id={`hosts-${vendor.id}`}>
+              {savedHosts.map((h) => (
+                <option key={h.id} value={h.name} />
+              ))}
+            </datalist>
+          )}
+        </div>
+        <div>
+          <label className="label">
+            Host email{' '}
+            <span className="text-[10px] font-normal text-slate-400">
+              (optional — CC’d if not you)
+            </span>
+          </label>
+          <input
+            type="email"
+            className="input"
+            placeholder="cbernard@mathworks.com"
+            value={vendor.hostEmail ?? ''}
+            onChange={(e) => onChange({ hostEmail: e.target.value })}
+            title="Only needed when the host is someone other than you. When set, this address is CC'd on the security notification so the host is looped in. Leave blank when you're the host."
+          />
+          <label
+            className={`flex items-center gap-2 text-xs mt-1 ${
+              hostVal ? 'text-slate-600' : 'text-slate-400 cursor-not-allowed'
+            }`}
+            title={
+              !hostVal
+                ? 'Type a host name first.'
+                : hostInBook
+                ? 'This host is in your host book. Uncheck to remove them.'
+                : 'Save this host (name + email) to your host book so you can pick them from the dropdown on future vendors.'
+            }
+          >
+            <input
+              type="checkbox"
+              disabled={!hostVal}
+              checked={hostInBook}
+              onChange={(e) => {
+                if (e.target.checked)
+                  onSaveHost(hostVal, vendor.hostEmail?.trim() || undefined);
+                else onRemoveHost(hostVal);
+              }}
+              className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 disabled:opacity-50"
+            />
+            Save host to book
+          </label>
         </div>
       </div>
 

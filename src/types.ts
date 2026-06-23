@@ -91,6 +91,14 @@ export interface Vendor {
    */
   host?: string;
   /**
+   * Email for the host above. Only needed when the host isn't you (the
+   * sender) — e.g. a co-worker covering while you're out. When set and
+   * different from the sender's own email, it's added to the CC line of
+   * the security notification so the host is looped in. A host name with
+   * no email simply isn't CC'd (we can't guess their address).
+   */
+  hostEmail?: string;
+  /**
    * Purpose of this on-site visit — why the vendor is here this time
    * (e.g. "Quarterly PM", "Leak repair", "Install"). Distinct from
    * `role` (their trade, e.g. Plumber). Surfaces in the security
@@ -194,6 +202,19 @@ export interface SavedVendor {
    * this field; treat missing as an empty list.
    */
   purposes?: string[];
+}
+
+/**
+ * A saved on-site host — typically a co-worker on the facilities team
+ * the user names as the visit host on a vendor. Stored in a global
+ * "host book" so their name + email can be pulled into future vendor
+ * entries via a dropdown instead of being re-typed. Dedupe key when
+ * saving is the lowercased, trimmed name.
+ */
+export interface SavedHost {
+  id: string;
+  name: string;
+  email?: string;
 }
 
 /**
@@ -432,6 +453,11 @@ export interface AppData {
    * missing.
    */
   savedVendorEvents?: SavedVendorEvent[];
+  /**
+   * Optional in the AppData JSON — older backups predate the host book.
+   * Importers should default to `[]` when missing.
+   */
+  savedHosts?: SavedHost[];
 }
 
 export const TRADE_LABELS: Record<TradeKey, string> = {
