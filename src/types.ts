@@ -202,6 +202,14 @@ export interface SavedVendor {
    * this field; treat missing as an empty list.
    */
   purposes?: string[];
+  /**
+   * Epoch ms of the last edit to this book entry. Used by the Phase B
+   * two-way Excel sync for per-record last-write-wins reconciliation
+   * (the vendor book is a global list, so it needs row-level timestamps
+   * rather than relying on a parent's updatedAt). Absent on entries
+   * created before this field — treated as oldest during reconcile.
+   */
+  updatedAt?: number;
 }
 
 /**
@@ -215,6 +223,12 @@ export interface SavedHost {
   id: string;
   name: string;
   email?: string;
+  /**
+   * Epoch ms of the last edit. Used by the Phase B two-way Excel sync
+   * for per-record last-write-wins reconciliation. Absent on older
+   * entries — treated as oldest during reconcile.
+   */
+  updatedAt?: number;
 }
 
 /**

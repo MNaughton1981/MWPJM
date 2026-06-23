@@ -471,7 +471,7 @@ export function buildSecurityNotification(
     ? formatDate(args.vendor.visitDate)
     : 'TBD';
 
-  const companySuffix = args.vendor.company ? ` (${args.vendor.company})` : '';
+  const company = args.vendor.company?.trim() || '';
 
   // When routing to Nuvolo, prefix subject with "RE: FWKD#######" so
   // ServiceNow's inbound action matches the email to the work order.
@@ -479,9 +479,11 @@ export function buildSecurityNotification(
   const postToNuvolo =
     args.alsoPostToNuvolo && /^FWKD\d+$/i.test(woId);
 
-  const subject = postToNuvolo
-    ? `RE: ${woId} — Vendor visit notice: ${args.vendor.name}${companySuffix} — ${visitDate}`
-    : `Vendor visit notice: ${args.vendor.name}${companySuffix} — ${visitDate}`;
+  // Company goes ahead of the person's name in the subject.
+  const subjectCore = company
+    ? `Vendor visit notice — ${company}: ${args.vendor.name} — ${visitDate}`
+    : `Vendor visit notice: ${args.vendor.name} — ${visitDate}`;
+  const subject = postToNuvolo ? `RE: ${woId} — ${subjectCore}` : subjectCore;
 
   const lines: string[] = [];
   if (args.preamble) {
@@ -559,9 +561,8 @@ export function buildMultiVendorSecurityNotification(
     ? [poc, ...namedVendors.filter((v) => v.id !== poc.id)]
     : namedVendors;
 
-  // Subject summarizes vendor count without blowing past mail client
-  // length limits. 1 vendor: name. 2: "A + B". 3+: "A + N others".
-  const subjectVendors = (() => {
+  // People summary: 1 → name; 2 → "A + B"; 3+ → "A + N others".
+  const subjectPeople = (() => {
     if (orderedVendors.length === 0) return 'visit';
     if (orderedVendors.length === 1) return orderedVendors[0].name;
     if (orderedVendors.length === 2)
@@ -569,14 +570,30 @@ export function buildMultiVendorSecurityNotification(
     return `${orderedVendors[0].name} + ${orderedVendors.length - 1} others`;
   })();
 
+  // Lead company goes AHEAD of the people in the subject. If the crew
+  // spans more than one company, mark the lead "+ others"; if the lead
+  // has no company on file, omit the company prefix entirely.
+  const companies = Array.from(
+    new Set(
+      orderedVendors
+        .map((v) => v.company?.trim())
+        .filter((c): c is string => !!c),
+    ),
+  );
+  const leadCompany = orderedVendors[0]?.company?.trim() || companies[0] || '';
+  const companyLabel = leadCompany
+    ? companies.length > 1
+      ? `${leadCompany} + others`
+      : leadCompany
+    : '';
+
   const woId = args.project.workOrderId?.trim().toUpperCase() ?? '';
   const postToNuvolo = args.alsoPostToNuvolo && /^FWKD\d+$/i.test(woId);
 
-  const vendorWord =
-    orderedVendors.length === 1 ? '1 vendor' : `${orderedVendors.length} vendors`;
-  const subject = postToNuvolo
-    ? `RE: ${woId} — Vendor visit notice: ${subjectVendors} (${vendorWord})`
-    : `Vendor visit notice: ${subjectVendors} (${vendorWord})`;
+  const subjectCore = companyLabel
+    ? `Vendor visit notice — ${companyLabel}: ${subjectPeople}`
+    : `Vendor visit notice: ${subjectPeople}`;
+  const subject = postToNuvolo ? `RE: ${woId} — ${subjectCore}` : subjectCore;
 
   const lines: string[] = [];
   if (args.preamble) {

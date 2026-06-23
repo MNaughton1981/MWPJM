@@ -245,6 +245,7 @@ export async function migrateToExcel(): Promise<MigrationResult> {
           email: vendor.email || '',
           generalNotes: vendor.generalNotes || '',
           purposes: (vendor.purposes ?? []).join('; '),
+          updatedAt: vendor.updatedAt ?? '',
         });
       }
     }
@@ -257,6 +258,7 @@ export async function migrateToExcel(): Promise<MigrationResult> {
           id: host.id,
           name: host.name,
           email: host.email || '',
+          updatedAt: host.updatedAt ?? '',
         });
       }
     }

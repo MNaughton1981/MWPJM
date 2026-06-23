@@ -253,6 +253,7 @@ export async function createBlankWorkbook(): Promise<ExcelJS.Workbook> {
     { header: 'GeneralNotes', key: 'generalNotes', width: 40 },
     // Recurring on-site purposes, joined with "; " (e.g. "Quarterly PM; Leak repair").
     { header: 'Purposes', key: 'purposes', width: 40 },
+    { header: 'UpdatedAt', key: 'updatedAt', width: 15 },
   ];
 
   // SavedHosts sheet — the host book (co-workers named as on-site host).
@@ -261,6 +262,7 @@ export async function createBlankWorkbook(): Promise<ExcelJS.Workbook> {
     { header: 'ID', key: 'id', width: 20 },
     { header: 'Name', key: 'name', width: 25 },
     { header: 'Email', key: 'email', width: 25 },
+    { header: 'UpdatedAt', key: 'updatedAt', width: 15 },
   ];
 
   // SavedVendorEvents sheet
