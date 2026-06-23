@@ -105,10 +105,20 @@ function nl2brHtml(s: string): string {
 /**
  * Build a shaded, rendered HTML table covering every named vendor on
  * the workboard — designed to be written to the clipboard and pasted
- * into an Outlook / Word / OneNote compose surface. Columns mirror the
- * fields a security desk cares about (name, company, role/purpose,
- * phone, email, visit date+time). Rows are zebra-striped; the point of
- * contact is highlighted amber and tagged with a ★.
+ * into an Outlook / Word / OneNote compose surface. Fields mirror what
+ * a security desk cares about (name, company, role/trade, purpose,
+ * phone, email, host, visit date+time).
+ *
+ * Orientation adapts to keep the table narrow enough for email / mobile:
+ *   - Normal case (a handful of vendors): TRANSPOSED — field names run
+ *     down the left as row headers and each vendor is a column (their
+ *     name is the column header, POC tinted amber). With more fields
+ *     than vendors this is far narrower than a wide table.
+ *   - Many-vendors case (vendors + 1 > field count): falls back to the
+ *     wide layout (one row per vendor, fields across the top).
+ *
+ * Empty fields no vendor fills in are dropped. Cells are zebra-shaded
+ * and the POC is tagged with a ★.
  *
  * Returns an HTML fragment (preamble paragraph + visit-context block +
  * table). Pair it with the plain-text body from
@@ -142,58 +152,111 @@ export function buildVendorTableHtml(
     ctx.push(`<b>Work Order:</b> ${escHtml(args.project.workOrderId)}`);
   parts.push(`<p style="${baseFont}">${ctx.join('<br>')}</p>`);
 
+  // Cell / header styling (inline only, so Outlook & Word render it
+  // without a stylesheet).
   const headStyle =
     'background:#1f4e79;color:#ffffff;text-align:left;padding:8px;border:1px solid #b9c6d6;font-size:12px';
+  const rowHeadStyle =
+    'background:#dce6f1;color:#1f3551;text-align:left;padding:8px;border:1px solid #b9c6d6;font-size:12px;font-weight:bold;white-space:nowrap';
   const cellStyle =
     'padding:8px;border:1px solid #d4dde8;font-size:13px;vertical-align:top';
 
-  const rows = ordered.map((v, i) => {
-    const isPoc = !!v.isPrimaryContact;
-    // Amber for the POC; otherwise zebra stripe light-blue / white.
-    const bg = isPoc ? '#fff4d6' : i % 2 === 0 ? '#eef3f8' : '#ffffff';
-    const nameCell = isPoc
+  // Per-vendor derived bits.
+  const nameHtml = (v: Vendor) =>
+    v.isPrimaryContact
       ? `${escHtml(v.name)} &#9733; <span style="color:#8a6d00">(point of contact)</span>`
       : escHtml(v.name);
-
+  const hostOf = (v: Vendor) => v.host?.trim() || args.technicianName || '';
+  const emailHtml = (v: Vendor) =>
+    v.email ? `<a href="mailto:${escHtml(v.email)}">${escHtml(v.email)}</a>` : '';
+  const visitHtmlOf = (v: Vendor) => {
     const visits = meaningfulVisits(v);
-    const visitHtml =
-      visits.length === 0
-        ? 'TBD'
-        : visits.map((vis) => escHtml(formatVisitLabel(vis))).join('<br>');
+    return visits.length === 0
+      ? 'TBD'
+      : visits.map((vis) => escHtml(formatVisitLabel(vis))).join('<br>');
+  };
 
-    const email = v.email
-      ? `<a href="mailto:${escHtml(v.email)}">${escHtml(v.email)}</a>`
-      : '';
-
-    const host = v.host?.trim() || args.technicianName || '';
-
-    return `<tr style="background:${bg}">
-      <td style="${cellStyle}"><b>${nameCell}</b></td>
-      <td style="${cellStyle}">${escHtml(v.company ?? '')}</td>
-      <td style="${cellStyle}">${escHtml(v.role ?? '')}</td>
-      <td style="${cellStyle}">${escHtml(v.purpose ?? '')}</td>
-      <td style="${cellStyle}">${escHtml(v.phone ?? '')}</td>
-      <td style="${cellStyle}">${email}</td>
-      <td style="${cellStyle}">${escHtml(host)}</td>
-      <td style="${cellStyle}">${visitHtml}</td>
-    </tr>`;
-  });
-
-  parts.push(
-    `<table border="1" cellspacing="0" cellpadding="8" style="border-collapse:collapse;${baseFont}">
-      <thead><tr>
-        <th style="${headStyle}">Name</th>
-        <th style="${headStyle}">Company</th>
-        <th style="${headStyle}">Role / trade</th>
-        <th style="${headStyle}">Purpose</th>
-        <th style="${headStyle}">Phone</th>
-        <th style="${headStyle}">Email</th>
-        <th style="${headStyle}">Host</th>
-        <th style="${headStyle}">Visit</th>
-      </tr></thead>
-      <tbody>${rows.join('')}</tbody>
-    </table>`,
+  // Field definitions. `raw` is used only to prune fields that no vendor
+  // fills in; `html` is what actually renders. Name and Visit always show.
+  type FieldDef = {
+    label: string;
+    always?: boolean;
+    raw: (v: Vendor) => string;
+    html: (v: Vendor) => string;
+  };
+  const allFields: FieldDef[] = [
+    { label: 'Name', always: true, raw: (v) => v.name, html: (v) => `<b>${nameHtml(v)}</b>` },
+    { label: 'Company', raw: (v) => v.company ?? '', html: (v) => escHtml(v.company ?? '') },
+    { label: 'Role / trade', raw: (v) => v.role ?? '', html: (v) => escHtml(v.role ?? '') },
+    { label: 'Purpose', raw: (v) => v.purpose ?? '', html: (v) => escHtml(v.purpose ?? '') },
+    { label: 'Phone', raw: (v) => v.phone ?? '', html: (v) => escHtml(v.phone ?? '') },
+    { label: 'Email', raw: (v) => v.email ?? '', html: (v) => emailHtml(v) },
+    { label: 'Host', raw: (v) => hostOf(v), html: (v) => escHtml(hostOf(v)) },
+    { label: 'Visit', always: true, raw: () => '', html: (v) => visitHtmlOf(v) },
+  ];
+  const fields = allFields.filter(
+    (f) => f.always || ordered.some((v) => f.raw(v).trim() !== ''),
   );
+
+  const tableOpen = `<table border="1" cellspacing="0" cellpadding="8" style="border-collapse:collapse;${baseFont}">`;
+
+  if (ordered.length === 0) {
+    parts.push(`<p style="${baseFont}"><i>No vendors with a name yet.</i></p>`);
+    return parts.join('\n');
+  }
+
+  // Orientation: when the wide layout would have "too many columns"
+  // (more field columns than vendors), transpose so the field names
+  // become row headers down the left and each vendor is a column. With
+  // the usual handful of vendors this is far narrower and reads cleanly
+  // in email and on mobile. Fall back to the wide layout only when there
+  // are so many vendors that vendor-columns would be wider than fields.
+  const transpose = ordered.length + 1 <= fields.length;
+
+  if (transpose) {
+    // Vendor names become the column headers (POC tinted amber); the
+    // Name field row is dropped since it's now the header.
+    const bodyFields = fields.filter((f) => f.label !== 'Name');
+    const headerCells = ordered
+      .map((v) => {
+        const bg = v.isPrimaryContact ? 'background:#fff4d6;color:#7a5c00;' : '';
+        return `<th style="${headStyle}${bg ? ';' + bg : ''}">${nameHtml(v)}</th>`;
+      })
+      .join('');
+    const bodyRows = bodyFields
+      .map((f, i) => {
+        const zebra = i % 2 === 0 ? '#ffffff' : '#f3f7fb';
+        const cells = ordered
+          .map((v) => `<td style="${cellStyle};background:${zebra}">${f.html(v)}</td>`)
+          .join('');
+        return `<tr><th style="${rowHeadStyle}">${escHtml(f.label)}</th>${cells}</tr>`;
+      })
+      .join('');
+    parts.push(
+      `${tableOpen}<thead><tr><th style="${headStyle}"></th>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table>`,
+    );
+  } else {
+    // Wide layout: one row per vendor, fields across the top.
+    const headerCells = fields
+      .map((f) => `<th style="${headStyle}">${escHtml(f.label)}</th>`)
+      .join('');
+    const bodyRows = ordered
+      .map((v, i) => {
+        const bg = v.isPrimaryContact
+          ? '#fff4d6'
+          : i % 2 === 0
+          ? '#eef3f8'
+          : '#ffffff';
+        const cells = fields
+          .map((f) => `<td style="${cellStyle}">${f.html(v)}</td>`)
+          .join('');
+        return `<tr style="background:${bg}">${cells}</tr>`;
+      })
+      .join('');
+    parts.push(
+      `${tableOpen}<thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table>`,
+    );
+  }
 
   return parts.join('\n');
 }
