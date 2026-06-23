@@ -81,13 +81,13 @@ export default function VendorsSection({ project }: Props) {
   const [groupVendors, setGroupVendors] = useState(true);
 
   /**
-   * "Format as table" — when on, the multi-vendor "Notify security"
-   * also copies the shaded HTML table to the clipboard so the user can
-   * paste it into the email that opens. Off by default; the plain-text
-   * body is always sent regardless, so an unsupported clipboard just
-   * means resend with this unchecked.
+   * "Send plain text only" — OFF by default, so the standard behavior is
+   * that "Notify security (all vendors)" copies the shaded HTML table to
+   * the clipboard (to paste into the email). Check this to SKIP the table
+   * and send only the plain-text body — the fallback when a browser can't
+   * write the HTML clipboard.
    */
-  const [formatAsTable, setFormatAsTable] = useState(false);
+  const [plainTextOnly, setPlainTextOnly] = useState(false);
 
   /** Transient status message for the table-copy / notify actions. */
   const [copyMsg, setCopyMsg] = useState('');
@@ -268,18 +268,16 @@ export default function VendorsSection({ project }: Props) {
       nuvoloEmail: settings.nuvoloEmail,
     };
     const mail = buildMultiVendorSecurityNotification(args);
-    // When "Format as table" is on, copy the shaded HTML table to the
-    // clipboard FIRST (still inside the click gesture) so the user can
-    // paste it (Ctrl+V) into the email that's about to open. The mailto
-    // always carries the plain-text body, so a browser without HTML
-    // clipboard support just means "resend with the box unchecked".
-    if (formatAsTable) {
+    // By default we copy the shaded HTML table to the clipboard (to paste
+    // into the email that opens). The "Send plain text only" opt-in skips
+    // that — the fallback when a browser can't write the HTML clipboard.
+    if (!plainTextOnly) {
       const html = buildVendorTableHtml(args);
       const ok = await copyRichText(html, mail.body);
       setCopyMsg(
         ok
           ? 'Table copied — in the email that opens, press Ctrl+V to paste it in.'
-          : 'This browser can’t copy the table — sending plain text. Resend with “Format as table” unchecked.',
+          : 'This browser couldn’t copy the table — the email still has the plain-text version. Tick “Send plain text only” and resend if needed.',
       );
       window.setTimeout(() => setCopyMsg(''), 8000);
     }
@@ -489,15 +487,15 @@ export default function VendorsSection({ project }: Props) {
             </label>
             <label
               className="flex items-center gap-2 text-xs text-slate-700"
-              title="When checked, Notify Security also copies a shaded vendor table to your clipboard — paste it (Ctrl+V) into the email that opens. If your browser can't copy it, the email still sends as plain text; just resend with this unchecked."
+              title="Notify Security copies a shaded vendor table to your clipboard by default (paste it into the email with Ctrl+V). Tick this to skip the table and send only the plain-text version — the fallback if your browser can't paste the table."
             >
               <input
                 type="checkbox"
-                checked={formatAsTable}
-                onChange={(e) => setFormatAsTable(e.target.checked)}
+                checked={plainTextOnly}
+                onChange={(e) => setPlainTextOnly(e.target.checked)}
                 className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
               />
-              Format as table (copies it to paste)
+              Send plain text only (fallback)
             </label>
             {woValid && (
               <label className="flex items-center gap-2 text-xs text-slate-600">
@@ -519,11 +517,9 @@ export default function VendorsSection({ project }: Props) {
                 void notifySecurityAllVendors(multiAlsoNuvolo && woValid)
               }
               title={
-                formatAsTable
-                  ? `Copies the vendor table, then opens mail with one combined notice for all ${namedVendorCount} vendors — paste the table in with Ctrl+V`
-                  : multiAlsoNuvolo && woValid
-                  ? `Open mail to security + Nuvolo (${project.workOrderId}) with one combined notice covering all ${namedVendorCount} vendors`
-                  : `Open mail with one combined notice covering all ${namedVendorCount} vendors`
+                plainTextOnly
+                  ? `Open mail with one combined plain-text notice for all ${namedVendorCount} vendors`
+                  : `Copies the shaded vendor table, then opens mail for all ${namedVendorCount} vendors — paste the table in with Ctrl+V`
               }
             >
               🛡️ Notify security (all {namedVendorCount} vendors) →

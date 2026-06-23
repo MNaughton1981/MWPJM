@@ -133,7 +133,9 @@ Trade coordination tracker.
 
 ## Sheet: Vendors
 
-On-site vendor contacts.
+On-site vendor contacts. The flat **VisitDate / VisitTime** columns mirror
+the vendor's *first* visit for at-a-glance reading; the full multi-date
+schedule lives in the **VendorVisits** sheet.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -141,14 +143,32 @@ On-site vendor contacts.
 | **ProjectID** | TEXT | Foreign key to Projects.ID |
 | **Name** | TEXT | Contact name |
 | **Company** | TEXT | Company name |
-| **Role** | TEXT | Role/title |
+| **Role** | TEXT | Role / trade (e.g., "Plumber") |
+| **Purpose** | TEXT | Purpose of visit this time (e.g., "Quarterly PM") |
 | **Phone** | TEXT | Phone number |
 | **Email** | TEXT | Email address |
-| **VisitDate** | DATE | Scheduled visit date |
-| **VisitTime** | TEXT | Scheduled visit time (e.g., "9:00 AM") |
-| **IsPrimaryContact** | BOOLEAN | TRUE if primary contact for project |
-| **Notes** | TEXT | Additional notes |
-| **BadgeOrFOBNeeded** | BOOLEAN | TRUE if security badge required |
+| **Host** | TEXT | On-site host (who they're here to see) |
+| **HostEmail** | TEXT | Host's email (CC'd on the notification when set) |
+| **VisitDate** | DATE | First visit date (mirror; see VendorVisits) |
+| **VisitTime** | TEXT | First visit time (mirror; see VendorVisits) |
+| **IsPrimaryContact** | BOOLEAN | TRUE if point of contact for the workboard |
+| **Notes** | TEXT | Per-visit notes |
+
+---
+
+## Sheet: VendorVisits
+
+The relational visit schedule — one row per scheduled visit, so a vendor
+can come on several dates or across a run of consecutive days.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| **ID** | TEXT | Unique visit ID |
+| **ProjectID** | TEXT | Foreign key to Projects.ID |
+| **VendorID** | TEXT | Foreign key to Vendors.ID |
+| **Date** | DATE | Visit start date (YYYY-MM-DD) |
+| **EndDate** | DATE | End date for a run of days (blank = single day) |
+| **Time** | TEXT | Visit time (e.g., "7:00 AM" or "8:00 AM – 10:00 AM") |
 
 ---
 
@@ -232,6 +252,20 @@ User's persistent vendor "book" (global, not per-project).
 | **Phone** | TEXT | Phone number |
 | **Email** | TEXT | Email address |
 | **GeneralNotes** | TEXT | General notes about this vendor |
+| **Purposes** | TEXT | Recurring on-site purposes, joined with "; " |
+
+---
+
+## Sheet: SavedHosts
+
+The host "book" — co-workers the user names as the on-site visit host on
+a vendor, so their name + email can be pulled in on future vendors.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| **ID** | TEXT | Unique host ID |
+| **Name** | TEXT | Host name |
+| **Email** | TEXT | Host email (CC'd on notifications when used) |
 
 ---
 
