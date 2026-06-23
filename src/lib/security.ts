@@ -1,5 +1,6 @@
 import type { Vendor } from '../types';
 import { formatDate } from './format';
+import { meaningfulVisits, formatVisitLabel } from './visits';
 
 export interface SecurityNotificationArgs {
   vendor: Vendor;
@@ -154,9 +155,11 @@ export function buildVendorTableHtml(
       ? `${escHtml(v.name)} &#9733; <span style="color:#8a6d00">(point of contact)</span>`
       : escHtml(v.name);
 
-    const visitParts: string[] = [];
-    visitParts.push(v.visitDate ? formatDate(v.visitDate) : 'TBD');
-    if (v.visitTime) visitParts.push(v.visitTime);
+    const visits = meaningfulVisits(v);
+    const visitHtml =
+      visits.length === 0
+        ? 'TBD'
+        : visits.map((vis) => escHtml(formatVisitLabel(vis))).join('<br>');
 
     const email = v.email
       ? `<a href="mailto:${escHtml(v.email)}">${escHtml(v.email)}</a>`
@@ -168,7 +171,7 @@ export function buildVendorTableHtml(
       <td style="${cellStyle}">${escHtml(v.role ?? '')}</td>
       <td style="${cellStyle}">${escHtml(v.phone ?? '')}</td>
       <td style="${cellStyle}">${email}</td>
-      <td style="${cellStyle}">${escHtml(visitParts.join(', '))}</td>
+      <td style="${cellStyle}">${visitHtml}</td>
     </tr>`;
   });
 
@@ -254,13 +257,20 @@ function renderVendorBlock(
   if (vendor.phone) lines.push(`${pad('Phone')}: ${vendor.phone}`);
   if (vendor.email) lines.push(`${pad('Email')}: ${vendor.email}`);
 
-  // Visit line: combines date + (optional) free-form time. "TBD"
-  // when the user hasn't picked a date yet — better than omitting
-  // the line entirely, which would leave the recipient guessing.
-  const visitParts: string[] = [];
-  visitParts.push(vendor.visitDate ? formatDate(vendor.visitDate) : 'TBD');
-  if (vendor.visitTime) visitParts.push(vendor.visitTime);
-  lines.push(`${pad('Visit')}: ${visitParts.join(', ')}`);
+  // Visit schedule. A vendor may come on more than one date, or across
+  // a run of consecutive days. One date → a single "Visit:" line. Two
+  // or more → a "Schedule:" header followed by one indented line per
+  // visit, so the security team can see exactly who's coming when.
+  const visits = meaningfulVisits(vendor);
+  if (visits.length <= 1) {
+    const only = visits[0];
+    lines.push(`${pad('Visit')}: ${only ? formatVisitLabel(only) : 'TBD'}`);
+  } else {
+    lines.push(`${pad('Schedule')}:`);
+    for (const v of visits) {
+      lines.push(`  • ${formatVisitLabel(v)}`);
+    }
+  }
 
   if (vendor.notes) lines.push(`${pad('Notes')}: ${vendor.notes}`);
 

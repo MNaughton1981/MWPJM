@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { Project, SavedVendor, Vendor } from '../types';
+import type { Project, SavedVendor, Vendor, VendorVisit } from '../types';
 import { useStore } from '../state/store';
 import {
   buildMultiVendorSecurityNotification,
@@ -10,6 +10,8 @@ import {
 } from '../lib/security';
 import { isValidWorkOrderId } from '../lib/nuvolo';
 import { copyRichText } from '../lib/destinations';
+import { uid } from '../lib/format';
+import { getVendorVisits } from '../lib/visits';
 import VisitTimeSelect from './VisitTimeSelect';
 
 interface Props {
@@ -134,13 +136,20 @@ export default function VendorsSection({ project }: Props) {
 
   /**
    * Insert a workboard vendor pre-filled from a saved book entry.
-   * Visit fields (visitDate, visitTime, notes) are left blank — those
-   * are visit-specific and should be filled in for this particular
-   * visit. The book entry's `generalNotes` get pre-filled into the
-   * workboard vendor's `notes` so they're visible on the card; the
-   * user can then append visit-specific text on top.
+   *
+   * Only the vendor's CONTACT info is copied (name, company, role,
+   * phone, email). Visit fields (dates, times) and notes are left
+   * blank by default — per-engagement details vary (this visit might
+   * be PM work, a brand-new repair, something entirely different), so
+   * nothing about the *purpose* of a past visit should silently carry
+   * over and risk going out to security as stale context.
+   *
+   * `includeNotes` is the opt-in: when the user explicitly chooses
+   * "with last notes" in the picker, the book entry's saved
+   * `generalNotes` (the previous purpose / access info) are pulled in
+   * as a starting point they can edit. Default is false.
    */
-  function addFromSaved(sv: SavedVendor) {
+  function addFromSaved(sv: SavedVendor, includeNotes = false) {
     addVendor(project.id, {
       name: sv.name,
       company: sv.company ?? '',
@@ -149,7 +158,7 @@ export default function VendorsSection({ project }: Props) {
       email: sv.email ?? '',
       visitDate: '',
       visitTime: '',
-      notes: sv.generalNotes ?? '',
+      notes: includeNotes ? sv.generalNotes ?? '' : '',
     });
     setPickerOpen(false);
     setPickerFilter('');
@@ -345,30 +354,44 @@ export default function VendorsSection({ project }: Props) {
                   </p>
                 ) : (
                   filteredSavedVendors.map((sv) => (
-                    <button
+                    <div
                       key={sv.id}
-                      type="button"
-                      onClick={() => addFromSaved(sv)}
-                      className="block w-full text-left px-1.5 py-1.5 rounded hover:bg-slate-50 text-sm"
-                      title={`Add ${sv.name}${
-                        sv.company ? ' — ' + sv.company : ''
-                      } to this workboard. Visit date / time are left blank for you to fill in.`}
+                      className="rounded hover:bg-slate-50"
                     >
-                      <div className="font-medium truncate">
-                        {sv.name}
-                        {sv.company && (
-                          <span className="text-slate-500 font-normal">
-                            {' '}
-                            — {sv.company}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-slate-500 truncate">
-                        {[sv.role, sv.phone, sv.email]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </div>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => addFromSaved(sv)}
+                        className="block w-full text-left px-1.5 py-1.5 text-sm"
+                        title={`Add ${sv.name}${
+                          sv.company ? ' — ' + sv.company : ''
+                        } to this workboard. Contact info only — visit dates, times, and notes are left blank for you to fill in for this engagement.`}
+                      >
+                        <div className="font-medium truncate">
+                          {sv.name}
+                          {sv.company && (
+                            <span className="text-slate-500 font-normal">
+                              {' '}
+                              — {sv.company}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-500 truncate">
+                          {[sv.role, sv.phone, sv.email]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </div>
+                      </button>
+                      {sv.generalNotes?.trim() && (
+                        <button
+                          type="button"
+                          onClick={() => addFromSaved(sv, true)}
+                          className="block w-full text-left px-1.5 pb-1.5 -mt-0.5 text-[11px] text-brand-600 hover:underline"
+                          title={`Add with the previous notes carried over:\n\n${sv.generalNotes}`}
+                        >
+                          + include last notes (opt-in)
+                        </button>
+                      )}
+                    </div>
                   ))
                 )}
               </div>
@@ -542,6 +565,45 @@ function VendorCard({
   const [alsoNuvolo, setAlsoNuvolo] = useState(hasValidWorkOrder);
   const isPoc = !!vendor.isPrimaryContact;
 
+  // ── Visit schedule editing ──────────────────────────────────────
+  // A vendor may come on several dates, or across a run of consecutive
+  // days. `visitRows` is what the editor renders: the stored visits, or
+  // a single blank draft row when there's nothing yet. Commits write the
+  // raw array (no pruning) so a freshly-added blank row sticks while it's
+  // being filled in; the email layer drops blanks via meaningfulVisits().
+  const storedVisits = getVendorVisits(vendor);
+  const visitRows: VendorVisit[] =
+    storedVisits.length > 0
+      ? storedVisits
+      : [{ id: '__draft', date: '', time: '' }];
+
+  function commitVisits(rows: VendorVisit[]) {
+    // Replace placeholder/legacy ids with real ones on first real edit.
+    const normalized = rows.map((r) =>
+      r.id === '__draft' || r.id === 'legacy' ? { ...r, id: uid() } : r,
+    );
+    const first = normalized.find((v) => v.date || v.time);
+    onChange({
+      visits: normalized,
+      // Mirror the first meaningful visit into the legacy flat fields so
+      // Excel export and any flat-field reader stay correct.
+      visitDate: first?.date ?? '',
+      visitTime: first?.time ?? '',
+    });
+  }
+
+  function updateVisit(idx: number, patch: Partial<VendorVisit>) {
+    commitVisits(
+      visitRows.map((r, i) => (i === idx ? { ...r, ...patch } : r)),
+    );
+  }
+  function addVisit() {
+    commitVisits([...visitRows, { id: uid(), date: '', time: '' }]);
+  }
+  function removeVisit(idx: number) {
+    commitVisits(visitRows.filter((_, i) => i !== idx));
+  }
+
   return (
     <li
       className={`border rounded-lg p-3 space-y-2 ${
@@ -633,25 +695,78 @@ function VendorCard({
             onChange={(e) => onChange({ email: e.target.value })}
           />
         </div>
-        <div>
-          <label className="label">Visit date</label>
-          <input
-            type="date"
-            className="input"
-            value={vendor.visitDate ?? ''}
-            onChange={(e) =>
-              onChange({ visitDate: e.target.value || undefined })
-            }
-          />
+      </div>
+
+      <div>
+        <label className="label">Visit schedule</label>
+        <div className="space-y-1.5">
+          {visitRows.map((row, idx) => (
+            <div key={row.id} className="flex flex-wrap items-end gap-1.5">
+              <div className="flex flex-col">
+                <span className="text-[10px] text-slate-400 leading-tight">
+                  Date
+                </span>
+                <input
+                  type="date"
+                  className="input w-auto"
+                  value={row.date ?? ''}
+                  onChange={(e) =>
+                    updateVisit(idx, { date: e.target.value || undefined })
+                  }
+                  title="Start date for this visit"
+                />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] text-slate-400 leading-tight">
+                  to (optional)
+                </span>
+                <input
+                  type="date"
+                  className="input w-auto"
+                  value={row.endDate ?? ''}
+                  min={row.date || undefined}
+                  onChange={(e) =>
+                    updateVisit(idx, { endDate: e.target.value || undefined })
+                  }
+                  title="Optional end date — set this for a run of consecutive days (e.g. Sat through Sun). Leave blank for a single day."
+                />
+              </div>
+              <div className="flex flex-col flex-1 min-w-[7.5rem]">
+                <span className="text-[10px] text-slate-400 leading-tight">
+                  Time
+                </span>
+                <VisitTimeSelect
+                  value={row.time ?? ''}
+                  onChange={(v) => updateVisit(idx, { time: v || undefined })}
+                  title="Time for this visit. Goes into the security notification."
+                />
+              </div>
+              {visitRows.length > 1 && (
+                <button
+                  type="button"
+                  className="text-slate-400 hover:text-rose-600 px-1 text-lg shrink-0 self-center"
+                  onClick={() => removeVisit(idx)}
+                  aria-label="Remove this date"
+                  title="Remove this date"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
         </div>
-        <div>
-          <label className="label">Visit time</label>
-          <VisitTimeSelect
-            value={vendor.visitTime ?? ''}
-            onChange={(v) => onChange({ visitTime: v || undefined })}
-            title="Pick the on-site time. Goes into the security notification email."
-          />
-        </div>
+        <button
+          type="button"
+          className="btn-ghost text-xs mt-1.5"
+          onClick={addVisit}
+          title="Add another date — e.g. a tech who comes Friday to prep, then back Saturday–Sunday with the crew. Every date goes into one security notification."
+        >
+          + Add another date
+        </button>
+        <p className="text-[11px] text-slate-500 mt-1">
+          Multiple dates for one vendor all go in a single notification.
+          Use the “to” date for a run of consecutive days.
+        </p>
       </div>
 
       <div>
@@ -698,7 +813,7 @@ function VendorCard({
               ? 'Enter the vendor name first.'
               : isInBook
               ? 'This vendor is in your book. Tap to update with the current field values.'
-              : 'Save name, company, role, phone, email and any general notes to your vendor book for one-tap reuse on future workboards.'
+              : 'Save this vendor’s contact info (name, company, role, phone, email) to your vendor book for one-tap reuse. Any notes are kept as opt-in “last notes” you can choose to pull in next time — they’re never applied automatically.'
           }
         >
           {isInBook ? '✓ In book' : '💾 Save to book'}

@@ -42,6 +42,29 @@ export interface ActivityEntry {
 }
 
 /**
+ * One scheduled on-site visit for a vendor. A vendor can have several —
+ * e.g. a lead tech who comes Friday to prep and is back Saturday–Sunday
+ * with the crew. Each entry is either a single day (`date` only) or a
+ * "run" of consecutive days (`date` → `endDate`).
+ */
+export interface VendorVisit {
+  id: string;
+  /** ISO start date (YYYY-MM-DD). */
+  date?: string;
+  /**
+   * Optional ISO end date (YYYY-MM-DD). When set and after `date`, the
+   * visit renders as a run of days ("Sat, Jun 27 – Sun, Jun 28").
+   * Leave blank for a single-day visit.
+   */
+  endDate?: string;
+  /**
+   * Free-form / dropdown time string for this visit, e.g. "7:00 AM" or
+   * a window "8:00 AM – 10:00 AM". Same shape as the legacy `visitTime`.
+   */
+  time?: string;
+}
+
+/**
  * A vendor / contractor / contact person coming on-site for a project.
  * Distinct from the Trade Coordination tracker — vendors are individual
  * people you might need to identify to security, give a visitor badge,
@@ -64,6 +87,20 @@ export interface Vendor {
    * the user types here is what the email gets.
    */
   visitTime?: string;
+  /**
+   * Multiple scheduled visits for this vendor — supports a vendor
+   * coming on more than one date, or across a run of consecutive days.
+   * When present and non-empty, this supersedes the single
+   * `visitDate` / `visitTime` for display and notifications.
+   *
+   * Backwards compatibility: `visitDate` / `visitTime` are kept in sync
+   * with the FIRST visit in this array (mirrored on every edit), so
+   * older code paths and Excel exports that read the flat fields keep
+   * working. Vendors created before this field default to a single
+   * derived visit built from `visitDate` / `visitTime` (see
+   * `getVendorVisits` in lib/visits.ts).
+   */
+  visits?: VendorVisit[];
   notes?: string;
   /**
    * When true, this vendor is the workboard's point of contact —
