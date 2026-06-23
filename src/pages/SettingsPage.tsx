@@ -23,6 +23,7 @@ import {
 import { formatDateTime } from '../lib/format';
 import PageTOC, { type PageTOCItem } from '../components/PageTOC';
 import { migrateToExcel, verifyExcelFile } from '../lib/migrateToExcel';
+import { syncWithExcel } from '../lib/excelTwoWay';
 import { setupWorkboardFolders } from '../lib/folderConnection';
 import PhotoRecoverySection from '../components/PhotoRecoverySection';
 import { syncPhotos } from '../lib/photoSync';
@@ -84,6 +85,7 @@ export default function SettingsPage() {
   const [excelExists, setExcelExists] = useState(false);
   const [excelProjectsCount, setExcelProjectsCount] = useState<number>(0);
   const [excelMigrating, setExcelMigrating] = useState(false);
+  const [excelSyncing, setExcelSyncing] = useState(false);
   const [setupMsg, setSetupMsg] = useState<string | null>(null);
   const [settingUp, setSettingUp] = useState(false);
   const [connectedFolder, setConnectedFolder] = useState<string | undefined>();
@@ -132,6 +134,25 @@ export default function SettingsPage() {
       setExcelMsg(`✗ Migration failed: ${(e as Error).message}`);
     } finally {
       setExcelMigrating(false);
+    }
+  }
+
+  async function handleSyncExcel() {
+    if (excelSyncing) return;
+    setExcelSyncing(true);
+    setExcelMsg('Syncing with Excel…');
+    try {
+      const res = await syncWithExcel();
+      if (res.status === 'error') {
+        setExcelMsg(`✗ Sync failed: ${res.message}`);
+      } else {
+        setExcelMsg(`✓ ${res.message}`);
+        setExcelExists(true);
+      }
+    } catch (e) {
+      setExcelMsg(`✗ Sync failed: ${(e as Error).message}`);
+    } finally {
+      setExcelSyncing(false);
     }
   }
 
@@ -818,6 +839,31 @@ export default function SettingsPage() {
         {excelMsg && (
           <div className="text-xs text-slate-700 bg-white border border-slate-300 rounded p-3">
             {excelMsg}
+          </div>
+        )}
+
+        {folderApi && connectedFolder && (
+          <div className="border-t border-brand-200 pt-3">
+            <div className="font-semibold text-sm flex items-center gap-2">
+              🔄 Two-way sync (Phase 2)
+              <span className="pill bg-emerald-600 text-white text-[10px]">NEW</span>
+            </div>
+            <button
+              className="btn-primary mt-2"
+              onClick={handleSyncExcel}
+              disabled={excelSyncing || excelMigrating}
+            >
+              {excelSyncing ? 'Syncing…' : '🔄 Sync with Excel (two-way)'}
+            </button>
+            <p className="text-[11px] text-slate-600 mt-2">
+              Reads <code className="font-mono">MWPJM-Data.xlsx</code> from your
+              connected folder, <strong>merges</strong> it with this device
+              (newest copy wins per record, nothing is dropped), then writes the
+              merged result back. <strong>Creates the file automatically on the
+              first run</strong> — no separate "Export to Excel" step needed.
+              Your local data stays as the working copy + backup. Desktop only
+              (mobile uses Send-to-desktop / Load-from-file).
+            </p>
           </div>
         )}
 
