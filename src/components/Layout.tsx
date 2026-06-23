@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { BUILD_TIME } from '../lib/appUpdate';
+import { BUILD_TIME, BUILD_COMMIT } from '../lib/appUpdate';
 import UpdatePrompt from './UpdatePrompt';
 
 // Primary nav items. Settings moved to gear icon in header.
@@ -81,8 +81,8 @@ export default function Layout() {
 
       <footer className="text-center text-xs text-slate-400 py-4 safe-bottom space-y-1">
         <div>Workboard · Local-first · Posts to Nuvolo via your email client</div>
-        <div className="font-mono text-[10px] text-slate-300">
-          Build {BUILD_TIME}
+        <div className="font-mono text-[10px] text-slate-400">
+          {formatBuildStamp()}
         </div>
       </footer>
 
@@ -93,6 +93,29 @@ export default function Layout() {
       <UpdatePrompt />
     </div>
   );
+}
+
+/**
+ * Build the footer version stamp: short commit hash + a readable UTC
+ * build date. The commit is the part that matters for "is this device
+ * on the latest code?" — the user compares it to the head commit on
+ * `main` in GitHub. The date is a friendlier secondary cue.
+ *
+ * Renders e.g. "Build 1a2b3c4 · 2026-06-22 14:30 UTC". Falls back
+ * gracefully to just the timestamp when the commit is unknown ('dev').
+ */
+function formatBuildStamp(): string {
+  let when = BUILD_TIME;
+  const parsed = new Date(BUILD_TIME);
+  if (!Number.isNaN(parsed.getTime())) {
+    // YYYY-MM-DD HH:MM UTC — compact and unambiguous across devices.
+    when = `${parsed.toISOString().slice(0, 10)} ${parsed
+      .toISOString()
+      .slice(11, 16)} UTC`;
+  }
+  return BUILD_COMMIT && BUILD_COMMIT !== 'dev'
+    ? `Build ${BUILD_COMMIT} · ${when}`
+    : `Build ${when}`;
 }
 
 /**

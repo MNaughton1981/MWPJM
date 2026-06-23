@@ -161,9 +161,22 @@ export async function pullFromFolder(
  * Mobile / Safari fallback: read a sync file the user picked from a
  * file dialog. Lets the user navigate to the file in the OneDrive app
  * and import it without needing the File System Access API.
+ *
+ * Guards against the most common mobile failure: OneDrive serves files
+ * "online-only" by default, so the picker can hand back a zero-byte
+ * placeholder before the cloud copy has been downloaded. We detect the
+ * empty read and return an actionable message instead of a confusing
+ * "not valid JSON" parse error.
  */
 export async function pullFromFile(file: File): Promise<SyncPayload> {
   const text = await file.text();
+  if (!text.trim()) {
+    throw new Error(
+      `"${file.name}" came back empty. If it's in OneDrive, it may still be ` +
+        `online-only — open it once in the OneDrive app (tap to download / ` +
+        `"Make available offline"), then try loading it again.`,
+    );
+  }
   return parseSyncPayload(text);
 }
 

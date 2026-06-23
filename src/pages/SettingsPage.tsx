@@ -213,9 +213,13 @@ export default function SettingsPage() {
     setSyncMsg(null);
     setBusy('push');
     try {
-      const payload = await pushNow(settings.syncFilename || DEFAULT_SYNC_FILENAME);
+      const fname = settings.syncFilename || DEFAULT_SYNC_FILENAME;
+      const payload = await pushNow(fname);
+      const where = connectedFolder ? ` in "${connectedFolder}"` : '';
       setSyncMsg(
-        `Sent ${payload.projects.length} project(s) to "${settings.syncFilename || DEFAULT_SYNC_FILENAME}". Other devices can now load the latest.`,
+        `Sent ${payload.projects.length} project(s) → "${fname}"${where}. ` +
+          `Wait for OneDrive to finish syncing that file to the cloud, then on ` +
+          `your other device tap "↓ Load saved file…" and pick it.`,
       );
     } catch (e) {
       setSyncMsg(`Send failed: ${(e as Error).message}`);
@@ -649,11 +653,32 @@ export default function SettingsPage() {
         </div>
 
         {!folderApi && (
-          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-2">
-            <strong>Auto-sync isn't supported on this browser.</strong> On
-            iPhone Safari and mobile Chrome, use <em>↓ Load saved file…</em>{' '}
-            below to import a snapshot file you've opened from the OneDrive
-            app.
+          <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded p-2 space-y-1">
+            <p>
+              <strong>This device can't auto-sync</strong> (folder access is
+              desktop Chrome/Edge only — not Android or iOS). Pull updates
+              manually instead:
+            </p>
+            <ol className="list-decimal list-inside space-y-0.5">
+              <li>
+                On your <strong>desktop</strong>, tap{' '}
+                <em>↑ Send: This device → other devices</em>.
+              </li>
+              <li>
+                Wait for OneDrive to finish syncing{' '}
+                <code>{settings.syncFilename || DEFAULT_SYNC_FILENAME}</code> to
+                the cloud (check the OneDrive app shows it as downloaded, not a
+                cloud icon).
+              </li>
+              <li>
+                Back here, tap <em>↓ Load saved file…</em> and pick that file
+                from the OneDrive app.
+              </li>
+            </ol>
+            <p className="text-[11px]">
+              Loading <strong>merges</strong> — it never deletes anything that
+              only exists on this device.
+            </p>
           </div>
         )}
 
