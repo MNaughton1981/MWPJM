@@ -141,17 +141,13 @@ export default function VendorsSection({ project }: Props) {
    *
    * Only the vendor's CONTACT info is copied (name, company, role,
    * phone, email). Visit fields (dates, times) and notes are left
-   * blank by default — per-engagement details vary (this visit might
-   * be PM work, a brand-new repair, something entirely different), so
-   * nothing about the *purpose* of a past visit should silently carry
-   * over and risk going out to security as stale context.
-   *
-   * `includeNotes` is the opt-in: when the user explicitly chooses
-   * "with last notes" in the picker, the book entry's saved
-   * `generalNotes` (the previous purpose / access info) are pulled in
-   * as a starting point they can edit. Default is false.
+   * blank — notes are per-visit and intentionally never saved to the
+   * book (Steve the sprinkler vendor needing data-center access this
+   * one time isn't worth remembering). The reusable thing is the
+   * vendor's recurring PURPOSES, which are offered as a dropdown in
+   * the Purpose field instead of being carried in via notes.
    */
-  function addFromSaved(sv: SavedVendor, includeNotes = false) {
+  function addFromSaved(sv: SavedVendor) {
     addVendor(project.id, {
       name: sv.name,
       company: sv.company ?? '',
@@ -160,7 +156,7 @@ export default function VendorsSection({ project }: Props) {
       email: sv.email ?? '',
       visitDate: '',
       visitTime: '',
-      notes: includeNotes ? sv.generalNotes ?? '' : '',
+      notes: '',
     });
     setPickerOpen(false);
     setPickerFilter('');
@@ -356,44 +352,35 @@ export default function VendorsSection({ project }: Props) {
                   </p>
                 ) : (
                   filteredSavedVendors.map((sv) => (
-                    <div
+                    <button
                       key={sv.id}
-                      className="rounded hover:bg-slate-50"
+                      type="button"
+                      onClick={() => addFromSaved(sv)}
+                      className="block w-full text-left px-1.5 py-1.5 rounded hover:bg-slate-50 text-sm"
+                      title={`Add ${sv.name}${
+                        sv.company ? ' — ' + sv.company : ''
+                      } to this workboard. Contact info only — pick a purpose and fill in the visit details on the card.`}
                     >
-                      <button
-                        type="button"
-                        onClick={() => addFromSaved(sv)}
-                        className="block w-full text-left px-1.5 py-1.5 text-sm"
-                        title={`Add ${sv.name}${
-                          sv.company ? ' — ' + sv.company : ''
-                        } to this workboard. Contact info only — visit dates, times, and notes are left blank for you to fill in for this engagement.`}
-                      >
-                        <div className="font-medium truncate">
-                          {sv.name}
-                          {sv.company && (
-                            <span className="text-slate-500 font-normal">
-                              {' '}
-                              — {sv.company}
-                            </span>
-                          )}
+                      <div className="font-medium truncate">
+                        {sv.name}
+                        {sv.company && (
+                          <span className="text-slate-500 font-normal">
+                            {' '}
+                            — {sv.company}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-500 truncate">
+                        {[sv.role, sv.phone, sv.email]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </div>
+                      {sv.purposes && sv.purposes.length > 0 && (
+                        <div className="text-[11px] text-slate-400 truncate">
+                          Purposes: {sv.purposes.join(', ')}
                         </div>
-                        <div className="text-[11px] text-slate-500 truncate">
-                          {[sv.role, sv.phone, sv.email]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </div>
-                      </button>
-                      {sv.generalNotes?.trim() && (
-                        <button
-                          type="button"
-                          onClick={() => addFromSaved(sv, true)}
-                          className="block w-full text-left px-1.5 pb-1.5 -mt-0.5 text-[11px] text-brand-600 hover:underline"
-                          title={`Add with the previous notes carried over:\n\n${sv.generalNotes}`}
-                        >
-                          + include last notes (opt-in)
-                        </button>
                       )}
-                    </div>
+                    </button>
                   ))
                 )}
               </div>
@@ -436,12 +423,11 @@ export default function VendorsSection({ project }: Props) {
                   role: v.role,
                   phone: v.phone,
                   email: v.email,
-                  // The workboard `notes` field is visit-specific in
-                  // intent, but we use it as the seed for the book
-                  // entry's generalNotes when saving. The user can
-                  // edit the book entry afterwards via Settings →
-                  // Vendor Book if they want different general notes.
-                  generalNotes: v.notes,
+                  // Notes are deliberately NOT saved to the book — they're
+                  // per-visit (this time's access needs, scope, etc.) and
+                  // rarely worth remembering. The reusable bits are the
+                  // contact info above and the vendor's purposes, which are
+                  // saved separately via the "Save purpose to book" checkbox.
                 })
               }
               isInBook={isVendorInBook(v, savedVendors)}
@@ -929,7 +915,7 @@ function VendorCard({
               ? 'Enter the vendor name first.'
               : isInBook
               ? 'This vendor is in your book. Tap to update with the current field values.'
-              : 'Save this vendor’s contact info (name, company, role, phone, email) to your vendor book for one-tap reuse. Any notes are kept as opt-in “last notes” you can choose to pull in next time — they’re never applied automatically.'
+              : 'Save this vendor’s contact info (name, company, role, phone, email) to your vendor book for one-tap reuse. Notes are not saved — they’re per-visit. Save recurring reasons for being on-site with the “Save purpose to book” checkbox instead.'
           }
         >
           {isInBook ? '✓ In book' : '💾 Save to book'}
