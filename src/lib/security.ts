@@ -214,27 +214,34 @@ export function buildVendorTableHtml(
   const transpose = ordered.length + 1 <= fields.length;
 
   if (transpose) {
-    // Vendor names become the column headers (POC tinted amber); the
-    // Name field row is dropped since it's now the header.
+    // Field names run down the left as row headers; each vendor is a
+    // column. "Name" is the FIRST ROW (its left header literally reads
+    // "Name"), styled light-blue + bold so it acts as the identifier
+    // row with good contrast — no dark text on a dark-blue header.
     const bodyFields = fields.filter((f) => f.label !== 'Name');
-    const headerCells = ordered
-      .map((v) => {
-        const bg = v.isPrimaryContact ? 'background:#fff4d6;color:#7a5c00;' : '';
-        return `<th style="${headStyle}${bg ? ';' + bg : ''}">${nameHtml(v)}</th>`;
-      })
+    const nameRowCell =
+      'background:#cfe0f3;color:#13243a;font-weight:bold;padding:8px;border:1px solid #b9c6d6;vertical-align:top';
+    const nameRowPoc =
+      'background:#fff4d6;color:#7a5c00;font-weight:bold;padding:8px;border:1px solid #b9c6d6;vertical-align:top';
+    const nameCells = ordered
+      .map(
+        (v) =>
+          `<td style="${v.isPrimaryContact ? nameRowPoc : nameRowCell}">${nameHtml(v)}</td>`,
+      )
       .join('');
+    const nameRow = `<tr><th style="${rowHeadStyle}">Name</th>${nameCells}</tr>`;
     const bodyRows = bodyFields
       .map((f, i) => {
         const zebra = i % 2 === 0 ? '#ffffff' : '#f3f7fb';
         const cells = ordered
-          .map((v) => `<td style="${cellStyle};background:${zebra}">${f.html(v)}</td>`)
+          .map(
+            (v) => `<td style="${cellStyle};background:${zebra}">${f.html(v)}</td>`,
+          )
           .join('');
         return `<tr><th style="${rowHeadStyle}">${escHtml(f.label)}</th>${cells}</tr>`;
       })
       .join('');
-    parts.push(
-      `${tableOpen}<thead><tr><th style="${headStyle}"></th>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table>`,
-    );
+    parts.push(`${tableOpen}<tbody>${nameRow}${bodyRows}</tbody></table>`);
   } else {
     // Wide layout: one row per vendor, fields across the top.
     const headerCells = fields
@@ -600,11 +607,17 @@ export function buildMultiVendorSecurityNotification(
   const toAddrs = nuvoloTo ? [...securityAddrs, nuvoloTo] : securityAddrs;
   const to = toAddrs.join(', ');
 
-  // CC: user's own email (if ccSelf) + POC email (if POC has one).
-  // De-duped against itself in case the user IS the POC.
+  // CC: user's own email (if ccSelf) + POC email (if POC has one) +
+  // each vendor's host email when the host isn't the sender. De-duped
+  // case-insensitively in case the user IS the POC or a host.
+  const userEmailLc = (args.userEmail ?? '').trim().toLowerCase();
+  const hostCcs = orderedVendors
+    .map((v) => v.hostEmail?.trim())
+    .filter((e): e is string => !!e && e.toLowerCase() !== userEmailLc);
   const cc = joinCcEmails(undefined, [
     args.ccSelf ? args.userEmail : undefined,
     poc?.email,
+    ...hostCcs,
   ]);
 
   const params = new URLSearchParams();

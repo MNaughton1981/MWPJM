@@ -91,6 +91,14 @@ export interface Vendor {
    */
   host?: string;
   /**
+   * Email for the host above. Only needed when the host isn't you (the
+   * sender) — e.g. a co-worker covering while you're out. When set and
+   * different from the sender's own email, it's added to the CC line of
+   * the security notification so the host is looped in. A host name with
+   * no email simply isn't CC'd (we can't guess their address).
+   */
+  hostEmail?: string;
+  /**
    * Purpose of this on-site visit — why the vendor is here this time
    * (e.g. "Quarterly PM", "Leak repair", "Install"). Distinct from
    * `role` (their trade, e.g. Plumber). Surfaces in the security
