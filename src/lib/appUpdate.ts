@@ -61,3 +61,12 @@ export async function forceAppUpdate(): Promise<void> {
  */
 export const BUILD_TIME: string =
   typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'dev';
+
+/**
+ * Short git commit hash the bundle was built from, injected by Vite's
+ * `define` config. This is the definitive version marker: compare it
+ * against the latest commit on `main` in GitHub to confirm a device is
+ * running the newest deploy. A stale cached PWA shows an older hash.
+ */
+export const BUILD_COMMIT: string =
+  typeof __BUILD_COMMIT__ !== 'undefined' ? __BUILD_COMMIT__ : 'dev';
