@@ -21,6 +21,8 @@ import {
   type SyncPayload,
 } from '../lib/sync';
 import { formatDateTime } from '../lib/format';
+import { signIn, signOut } from '../lib/graphAuth';
+import { graphSyncNow } from '../lib/graphSync';
 import PageTOC, { type PageTOCItem } from '../components/PageTOC';
 import { migrateToExcel, verifyExcelFile } from '../lib/migrateToExcel';
 import { syncWithExcel } from '../lib/excelTwoWay';
@@ -39,7 +41,8 @@ const TOC_ITEMS: PageTOCItem[] = [
   { id: 'sec-folder', label: 'Nuvolo report folder path', icon: '📁' },
   { id: 'sec-storage', label: 'Storage layout', icon: '🗂️' },
   { id: 'sec-photos', label: 'Photo naming pattern', icon: '🖼️' },
-  { id: 'sec-sync', label: 'Sync state via OneDrive', icon: '🔄' },
+  { id: 'sec-graph-sync', label: 'Sync via Microsoft account', icon: '☁️' },
+  { id: 'sec-sync', label: 'Sync via OneDrive folder', icon: '🔄' },
   { id: 'sec-excel', label: 'Excel backend (new!)', icon: '📊' },
   { id: 'sec-vendor-book', label: 'Visitor book', icon: '📒' },
   { id: 'sec-host-book', label: 'Host book', icon: '🧑‍🔧' },
@@ -89,8 +92,16 @@ export default function SettingsPage() {
   const [setupMsg, setSetupMsg] = useState<string | null>(null);
   const [settingUp, setSettingUp] = useState(false);
   const [connectedFolder, setConnectedFolder] = useState<string | undefined>();
-  const [busy, setBusy] = useState<'push' | 'pull' | 'photos' | null>(null);
+  const [busy, setBusy] = useState<
+    'push' | 'pull' | 'photos' | 'graph-auth' | 'graph-sync' | null
+  >(null);
   const folderApi = isFolderApiSupported();
+
+  // Microsoft Graph (OneDrive for Business) sync state.
+  const graphAccount = useStore((s) => s.graphAccount);
+  const graphLastSyncedAt = useStore((s) => s.graphLastSyncedAt);
+  const graphSyncError = useStore((s) => s.graphSyncError);
+  const graphSyncEnabled = useStore((s) => s.settings.graphSyncEnabled ?? false);
 
   useEffect(() => {
     getStoredFolderName().then(setConnectedFolder);
@@ -209,7 +220,67 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleGraphSignIn() {
+    setSyncMsg(null);
+    setBusy('graph-auth');
+    try {
+      const acct = await signIn();
+      useStore.setState({
+        graphAccount: acct.name || acct.username,
+        graphSyncError: null,
+      });
+      // Turn on auto-sync by default once signed in — that's the whole
+      // point of signing in. App.tsx reacts to this flag.
+      setSettings({ graphSyncEnabled: true });
+      setSyncMsg('Signed in — syncing with OneDrive…');
+      const r = await graphSyncNow();
+      setSyncMsg(
+        r.kind === 'merged'
+          ? `Signed in and synced (${r.summary.added} new, ${r.summary.updated} updated, ${r.summary.keptLocalOnly} kept).`
+          : 'Signed in — created your OneDrive snapshot for the first time.',
+      );
+    } catch (e) {
+      setSyncMsg(`Microsoft sign-in failed: ${(e as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleGraphSignOut() {
+    setSyncMsg(null);
+    setBusy('graph-auth');
+    try {
+      await signOut();
+      useStore.setState({ graphAccount: null, graphSyncError: null });
+      setSettings({ graphSyncEnabled: false });
+      setSyncMsg('Signed out of Microsoft sync on this device.');
+    } catch (e) {
+      setSyncMsg(`Sign-out failed: ${(e as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleGraphSyncNow() {
+    setSyncMsg(null);
+    setBusy('graph-sync');
+    try {
+      const r = await graphSyncNow();
+      setSyncMsg(
+        r.kind === 'merged'
+          ? `Synced with OneDrive — ${r.summary.added} new, ${r.summary.updated} updated, ${r.summary.keptLocalOnly} kept.`
+          : 'Synced — created your OneDrive snapshot for the first time.',
+      );
+    } catch (e) {
+      setSyncMsg(`Sync failed: ${(e as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function pushSyncNow() {
+    setSyncMsg(null);
+    setBusy('push');
     setSyncMsg(null);
     setBusy('push');
     try {
@@ -629,6 +700,93 @@ export default function SettingsPage() {
             something like <code>FWKD123_2026-05-21_001_dishwasher-rough-in.jpg</code>.
           </p>
         </div>
+      </section>
+
+      <section
+        id="sec-graph-sync"
+        className="card p-4 space-y-3 scroll-mt-20"
+      >
+        <div>
+          <h2 className="font-semibold">
+            Sync via Microsoft account (recommended)
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Sign in with your MathWorks account to sync this device through
+            your OneDrive for Business over the network. Unlike the folder
+            sync below, this works on{' '}
+            <strong>every device and browser — including your phone</strong>:
+            sign in once and the app keeps itself current automatically. Your
+            data stays in your own OneDrive (in an <code>MWPJM</code> folder)
+            — nothing goes to any third-party server.
+          </p>
+        </div>
+
+        {graphAccount ? (
+          <>
+            <div className="text-xs text-slate-600">
+              Signed in as{' '}
+              <span className="pill bg-emerald-100 text-emerald-800">
+                ✓ {graphAccount}
+              </span>
+            </div>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                checked={graphSyncEnabled}
+                onChange={(e) =>
+                  setSettings({ graphSyncEnabled: e.target.checked })
+                }
+              />
+              <span>
+                <strong>Keep this device synced automatically</strong> — pull
+                the latest when the app opens and push your changes as you
+                make them.
+              </span>
+            </label>
+            <div className="text-xs text-slate-600">
+              {graphSyncError
+                ? `Last error: ${graphSyncError}`
+                : graphLastSyncedAt
+                  ? `Last synced ${formatDateTime(graphLastSyncedAt)}`
+                  : 'Not synced yet on this device.'}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="btn-primary text-sm"
+                onClick={handleGraphSyncNow}
+                disabled={busy !== null}
+                title="Pull the latest from OneDrive, merge it with this device, and push the result back. Safe — merging never deletes anything."
+              >
+                {busy === 'graph-sync' ? 'Syncing…' : '🔄 Sync now'}
+              </button>
+              <button
+                className="btn-secondary text-sm"
+                onClick={handleGraphSignOut}
+                disabled={busy !== null}
+              >
+                {busy === 'graph-auth' ? 'Working…' : 'Sign out'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="space-y-2">
+            <button
+              className="btn-primary text-sm"
+              onClick={handleGraphSignIn}
+              disabled={busy !== null}
+            >
+              {busy === 'graph-auth'
+                ? 'Signing in…'
+                : '🔐 Sign in with Microsoft'}
+            </button>
+            <p className="text-[11px] text-slate-500">
+              Opens a Microsoft sign-in popup. The first time, you'll be asked
+              to allow the app to read and write its own files in your
+              OneDrive.
+            </p>
+          </div>
+        )}
       </section>
 
       <section id="sec-sync" className="card p-4 space-y-3 scroll-mt-20">

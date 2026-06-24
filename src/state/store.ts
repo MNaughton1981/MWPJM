@@ -70,6 +70,17 @@ interface AppState {
   syncError: string | null;
 
   /**
+   * Graph (OneDrive for Business) sync status — transient runtime
+   * state, not meaningfully persisted. `graphAccount` is the signed-in
+   * account's display label (reconciled from MSAL on app start),
+   * `graphLastSyncedAt` is the last successful Graph sync, and
+   * `graphSyncError` holds the most recent Graph sync failure message.
+   */
+  graphAccount: string | null;
+  graphLastSyncedAt: string | null;
+  graphSyncError: string | null;
+
+  /**
    * The user's persistent vendor "book" — independent of any specific
    * workboard. Auto-populated when the user saves a vendor on a
    * workboard via the "💾 Save to book" button, and surfaced as a
@@ -360,6 +371,7 @@ const defaultSettings: Settings = {
   securityPreamble: DEFAULT_SECURITY_PREAMBLE,
   securityCcSelf: true,
   syncEnabled: false,
+  graphSyncEnabled: false,
   syncFilename: 'mwpjm-state.json',
   calendarProvider: 'outlook', // Default to Outlook Calendar (.ics download)
   photosSubfolder: 'photos',
@@ -379,6 +391,9 @@ export const useStore = create<AppState>()(
       meetingNotesOrders: null,
       lastSyncedAt: null,
       syncError: null,
+      graphAccount: null,
+      graphLastSyncedAt: null,
+      graphSyncError: null,
       savedVendors: [],
       savedVendorEvents: [],
       savedHosts: [],

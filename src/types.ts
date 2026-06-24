@@ -413,6 +413,15 @@ export interface Settings {
    */
   syncEnabled: boolean;
   /**
+   * When true, the app syncs its state to the user's OneDrive for
+   * Business over Microsoft Graph (requires signing in with the
+   * MathWorks account). Unlike the folder-based `syncEnabled`, this
+   * works on every device and browser — including mobile — because it
+   * goes over the network instead of the desktop-only File System
+   * Access API. Off by default until the user signs in and enables it.
+   */
+  graphSyncEnabled?: boolean;
+  /**
    * Filename used for the cross-device state sync file inside the
    * connected folder. Defaults to `mwpjm-state.json`. Lives next to
    * the user's CSV exports — OneDrive doesn't care.
