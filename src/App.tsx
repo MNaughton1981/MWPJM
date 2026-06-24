@@ -14,6 +14,8 @@ import {
   startAutoSync,
   stopAutoSync,
 } from './lib/sync';
+import { getAccountLabel } from './lib/graphAuth';
+import { graphSyncNow, startGraphAutoSync, stopGraphAutoSync } from './lib/graphSync';
 
 export default function App() {
   // Wire up cross-device state sync. When the user has flipped
@@ -37,6 +39,45 @@ export default function App() {
     }
     return () => stopAutoSync();
   }, [syncEnabled, syncFilename]);
+
+  // Wire up Microsoft Graph (OneDrive for Business) sync — the path
+  // that works on every device, including mobile. On app start we
+  // reconcile the signed-in account from MSAL's cache. When the user
+  // is signed in AND has Graph sync enabled, we do one pull+merge+push
+  // on open (so this device picks up edits made elsewhere), then keep
+  // pushing changes as they happen via a debounced subscription.
+  const graphSyncEnabled = useStore((s) => s.settings.graphSyncEnabled);
+  const graphAccount = useStore((s) => s.graphAccount);
+
+  useEffect(() => {
+    let stop: (() => void) | null = null;
+    let cancelled = false;
+
+    (async () => {
+      const label = await getAccountLabel();
+      if (cancelled) return;
+      // Only write when changed, so this effect doesn't re-trigger
+      // itself via the graphAccount dependency.
+      if (useStore.getState().graphAccount !== label) {
+        useStore.setState({ graphAccount: label });
+      }
+      if (!label || !graphSyncEnabled) return;
+
+      try {
+        await graphSyncNow();
+      } catch {
+        // Failure is recorded in store.graphSyncError; Settings shows it.
+      }
+      if (cancelled) return;
+      stop = startGraphAutoSync();
+    })();
+
+    return () => {
+      cancelled = true;
+      if (stop) stop();
+      stopGraphAutoSync();
+    };
+  }, [graphSyncEnabled, graphAccount]);
 
   return (
     <Routes>

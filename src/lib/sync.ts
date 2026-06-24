@@ -83,6 +83,16 @@ function buildPayload(): SyncPayload {
 }
 
 /**
+ * Snapshot the current store state as a SyncPayload, without doing any
+ * I/O. Used by the Graph (OneDrive for Business) sync path, which needs
+ * the same payload shape as the file-based path but uploads it over the
+ * network instead of writing to a connected folder.
+ */
+export function currentSyncPayload(): SyncPayload {
+  return buildPayload();
+}
+
+/**
  * Validate and normalize a parsed JSON object into a SyncPayload.
  * Throws with a user-friendly message if the file isn't a sync file.
  */
