@@ -1,18 +1,21 @@
 /**
- * Microsoft Entra (Azure AD) sign-in via MSAL, popup flow.
+ * Microsoft Entra (Azure AD) sign-in via MSAL, redirect flow.
  *
- * Why popup and not redirect: the app uses a HashRouter, and MSAL's
- * redirect flow also round-trips state through the URL hash — the two
- * fight over the hash and make redirect handling brittle on GitHub
- * Pages. Popup sign-in sidesteps that entirely: the OAuth dance happens
- * in a child window and the main app's URL is never touched. Sign-in is
- * an explicit button press (a user gesture), so popup blockers aren't a
- * problem.
+ * Why redirect and not popup: popup sign-in is unreliable inside an
+ * installed mobile PWA (standalone windows can't manage the popup, so
+ * the auth response gets orphaned — the browser may even try to
+ * "download" the response). Redirect flow navigates the app's own
+ * window to the Microsoft login page and back, which is the supported
+ * path for mobile / installed PWAs.
+ *
+ * The trade-off with the app's HashRouter is handled by consuming the
+ * redirect response (`handleRedirectPromise`) during MSAL init, BEFORE
+ * the router mounts (see getMsal + main.tsx), so the `#code=...` in the
+ * return URL is never mistaken for an app route.
  *
  * Tokens are cached in localStorage so a signed-in session survives PWA
- * restarts — important on the Pixel where the app launches from a
- * home-screen shortcut. `acquireTokenSilent` refreshes access tokens in
- * the background; we only fall back to an interactive popup when the
+ * restarts. `acquireTokenSilent` refreshes access tokens in the
+ * background; we only fall back to an interactive redirect when the
  * refresh token is gone or consent is required.
  */
 
@@ -60,11 +63,21 @@ export async function getMsal(): Promise<PublicClientApplication> {
       },
     });
     await instance.initialize();
-    // Restore the previously active account if MSAL has one cached.
-    const active = instance.getActiveAccount();
-    if (!active) {
-      const all = instance.getAllAccounts();
-      if (all.length > 0) instance.setActiveAccount(all[0]);
+    // Process a returning sign-in/token redirect FIRST. When the user
+    // comes back from the Microsoft login page, the auth response is in
+    // the URL; handleRedirectPromise consumes it and hands us the
+    // account. Doing this before the router mounts (see main.tsx) keeps
+    // the HashRouter from mis-reading the `#code=...` response as a route.
+    const redirectResult = await instance.handleRedirectPromise();
+    if (redirectResult?.account) {
+      instance.setActiveAccount(redirectResult.account);
+    } else {
+      // Restore the previously active account if MSAL has one cached.
+      const active = instance.getActiveAccount();
+      if (!active) {
+        const all = instance.getAllAccounts();
+        if (all.length > 0) instance.setActiveAccount(all[0]);
+      }
     }
     msalInstance = instance;
     return instance;
@@ -86,28 +99,34 @@ export async function getAccountLabel(): Promise<string | null> {
   return acct.name || acct.username || null;
 }
 
-/** Interactive sign-in via popup. Returns the signed-in account. */
-export async function signIn(): Promise<AccountInfo> {
+/**
+ * Start interactive sign-in. Navigates the whole window to the
+ * Microsoft login page; control returns to the app at the redirect URI,
+ * where getMsal()'s handleRedirectPromise picks up the account. Because
+ * the page navigates away, this never resolves in the normal flow —
+ * callers should not await a result from it.
+ */
+export async function signIn(): Promise<void> {
   const msal = await getMsal();
-  const result = await msal.loginPopup({ scopes: GRAPH_SCOPES });
-  msal.setActiveAccount(result.account);
-  return result.account;
+  await msal.loginRedirect({ scopes: GRAPH_SCOPES });
 }
 
 /** Sign out and clear the cached session for this account. */
 export async function signOut(): Promise<void> {
   const msal = await getMsal();
   const account = msal.getActiveAccount() ?? undefined;
-  // logoutPopup clears MSAL's cache; account hint avoids the
-  // account-picker step on the way out.
-  await msal.logoutPopup({ account });
   msal.setActiveAccount(null);
+  // logoutRedirect clears MSAL's cache; account hint avoids the
+  // account-picker step on the way out.
+  await msal.logoutRedirect({ account });
 }
 
 /**
- * Acquire a Graph access token. Tries silent refresh first; only opens
- * an interactive popup when MSAL says interaction is required (expired
- * refresh token, new consent needed). Throws if nobody is signed in.
+ * Acquire a Graph access token. Tries silent refresh first; only falls
+ * back to an interactive redirect when MSAL says interaction is
+ * required (expired refresh token, new consent needed). Throws if
+ * nobody is signed in. The redirect fallback navigates away; on return,
+ * auto-sync runs again and the silent path succeeds.
  */
 export async function getGraphToken(): Promise<string> {
   const msal = await getMsal();
@@ -121,10 +140,10 @@ export async function getGraphToken(): Promise<string> {
     return result.accessToken;
   } catch (e) {
     if (e instanceof InteractionRequiredAuthError) {
-      const result = await msal.acquireTokenPopup(
-        request as RedirectRequest,
-      );
-      return result.accessToken;
+      await msal.acquireTokenRedirect(request as RedirectRequest);
+      // Navigation is underway; this line is effectively unreachable,
+      // but satisfies the return type.
+      throw new Error('Redirecting to Microsoft to refresh sign-in…');
     }
     throw e;
   }
