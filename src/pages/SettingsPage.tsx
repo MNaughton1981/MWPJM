@@ -221,27 +221,16 @@ export default function SettingsPage() {
   }
 
   async function handleGraphSignIn() {
-    setSyncMsg(null);
+    setSyncMsg('Redirecting to Microsoft sign-in…');
     setBusy('graph-auth');
     try {
-      const acct = await signIn();
-      useStore.setState({
-        graphAccount: acct.name || acct.username,
-        graphSyncError: null,
-      });
-      // Turn on auto-sync by default once signed in — that's the whole
-      // point of signing in. App.tsx reacts to this flag.
+      // Turn on auto-sync BEFORE redirecting so it's already enabled
+      // when we return from the Microsoft login page — App.tsx then
+      // pulls + merges your data automatically on the way back in.
       setSettings({ graphSyncEnabled: true });
-      setSyncMsg('Signed in — syncing with OneDrive…');
-      const r = await graphSyncNow();
-      setSyncMsg(
-        r.kind === 'merged'
-          ? `Signed in and synced (${r.summary.added} new, ${r.summary.updated} updated, ${r.summary.keptLocalOnly} kept).`
-          : 'Signed in — created your OneDrive snapshot for the first time.',
-      );
+      await signIn(); // navigates away (redirect flow); code below won't run
     } catch (e) {
       setSyncMsg(`Microsoft sign-in failed: ${(e as Error).message}`);
-    } finally {
       setBusy(null);
     }
   }
@@ -250,13 +239,13 @@ export default function SettingsPage() {
     setSyncMsg(null);
     setBusy('graph-auth');
     try {
-      await signOut();
-      useStore.setState({ graphAccount: null, graphSyncError: null });
+      // Clear local sign-in state before the logout redirect navigates
+      // away, so we return to a clean signed-out view.
       setSettings({ graphSyncEnabled: false });
-      setSyncMsg('Signed out of Microsoft sync on this device.');
+      useStore.setState({ graphAccount: null, graphSyncError: null });
+      await signOut(); // navigates away (redirect flow)
     } catch (e) {
       setSyncMsg(`Sign-out failed: ${(e as Error).message}`);
-    } finally {
       setBusy(null);
     }
   }
