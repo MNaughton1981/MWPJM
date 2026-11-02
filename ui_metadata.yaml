@@ -1,0 +1,4 @@
+interface:
+  display_name: "Asset Registry Assistant"
+  short_description: "Capture and validate equipment audits"
+  brand_color: "#174A72"

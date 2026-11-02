@@ -1,18 +1,1 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/MWPJM/icon.svg" />
-    <link rel="apple-touch-icon" href="/MWPJM/icon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0f172a" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Workboard" />
-    <title>Workboard — Facilities Project Manager</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>Asset Registry Assistant</title><style>body{font:16px system-ui;margin:auto;max-width:720px;padding:20px;color:#18313f}label{display:block;margin:14px 0 5px;font-weight:700}input,textarea,button{box-sizing:border-box;width:100%;padding:12px;font:inherit}button{margin-top:18px;background:#174a72;color:white;border:0;border-radius:8px}</style><h1>Asset Registry Assistant</h1><p>Capture the data plate, then enter only values clearly visible on the tag.</p><form action="/capture" method="post" enctype="multipart/form-data"><label>Equipment photo</label><input type="file" name="photo" accept="image/*" capture="environment" required><label>Equipment type</label><input name="equipment_type"><label>Manufacturer</label><input name="manufacturer"><label>Model</label><input name="model"><label>Serial number</label><input name="serial_number"><label>Foodservice unit tag</label><input name="unit_tag"><label>Location</label><input name="location_name"><label>Notes</label><textarea name="notes"></textarea><button>Validate and create draft</button></form>
